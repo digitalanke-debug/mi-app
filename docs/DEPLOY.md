@@ -8,6 +8,24 @@ El hosting cPanel compartido **no sirve** para este CRM: necesita procesos Node 
 - Ubuntu 24.04. Instalar Docker: `curl -fsSL https://get.docker.com | sh`.
 - DNS: crear `crm.tudominio.com` apuntando a la IP del VPS (y `n8n.tudominio.com` si se usa n8n).
 
+## 1b. Instalación automática en Hetzner
+
+Hay un script que hace los pasos 1 a 3 y 7 solo:
+
+1. En https://console.hetzner.cloud crear proyecto → "Add server". Ubicación: Falkenstein o Nuremberg (Alemania, línea CX, la más barata) o Ashburn (EE. UU., línea CPX, más cara). Imagen: **Ubuntu 24.04**. Tipo: **CX33** (4 vCPU, 8 GB) o CPX31 en EE. UU. Agregar la llave SSH y crear.
+2. Apuntar el DNS `crm.tudominio.com` → IP del servidor (registro A).
+3. Conectarse por SSH y ejecutar:
+
+```bash
+ssh root@IP_DEL_SERVIDOR
+curl -fsSL https://raw.githubusercontent.com/USUARIO/REPO/main/deploy/install-hetzner.sh -o install.sh
+bash install.sh https://github.com/USUARIO/REPO.git crm.tudominio.com
+```
+
+El script actualiza Ubuntu, activa firewall y fail2ban, instala Docker y Caddy, clona el CRM en `/opt/crm`, genera un `.env` con claves aleatorias, emite el certificado HTTPS, levanta los contenedores, migra la base y deja un respaldo diario en `/opt/crm/backups`. Al terminar imprime los pasos finales. Si el repositorio es privado, usar un token de acceso en la URL o clonar con llave de despliegue.
+
+Los pasos manuales siguen abajo por si prefieren hacerlos uno a uno o el servidor no es Hetzner.
+
 ## 2. Subir el proyecto
 
 ```bash

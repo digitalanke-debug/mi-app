@@ -1,0 +1,15 @@
+# Reemplaza los dominios y copia a /etc/caddy/Caddyfile
+crm.tudominio.com {
+    encode gzip
+    reverse_proxy localhost:4000
+}
+
+# Opcional: panel de Evolution API (solo si necesitas verlo; protegido por su API key)
+evolution.tudominio.com {
+    reverse_proxy localhost:8080
+}
+
+# Opcional: n8n para automatizaciones avanzadas
+n8n.tudominio.com {
+    reverse_proxy localhost:5678
+}

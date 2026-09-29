@@ -1,0 +1,93 @@
+# Despliegue en VPS: docker compose up -d
+# Servicios: postgres (datos), redis (caché Evolution), evolution (WhatsApp por QR), server (CRM API + web), n8n (automatizaciones avanzadas, opcional)
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: crm
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-crm}
+      POSTGRES_DB: crm
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crm"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --save 60 1
+    volumes:
+      - redisdata:/data
+
+  evolution:
+    image: evoapicloud/evolution-api:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SERVER_URL: ${EVOLUTION_PUBLIC_URL:-http://localhost:8080}
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY:-cambia-esta-clave}
+      DATABASE_ENABLED: "true"
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://crm:${POSTGRES_PASSWORD:-crm}@postgres:5432/evolution?schema=public
+      DATABASE_CONNECTION_CLIENT_NAME: evolution
+      CACHE_REDIS_ENABLED: "true"
+      CACHE_REDIS_URI: redis://redis:6379/6
+      CACHE_REDIS_PREFIX_KEY: evolution
+      CACHE_LOCAL_ENABLED: "false"
+      QRCODE_LIMIT: "30"
+      LANGUAGE: es
+      DEL_INSTANCE: "false"
+      CONFIG_SESSION_PHONE_CLIENT: CRM
+      CONFIG_SESSION_PHONE_NAME: Chrome
+    volumes:
+      - evolution_instances:/evolution/instances
+    ports:
+      - "127.0.0.1:8080:8080"
+
+  server:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PORT: 4000
+      JWT_SECRET: ${JWT_SECRET:-cambia-esto-por-una-clave-larga}
+      CLIENT_ORIGIN: ${PUBLIC_URL:-http://localhost:4000}
+      DB_CLIENT: pg
+      DATABASE_URL: postgres://crm:${POSTGRES_PASSWORD:-crm}@postgres:5432/crm
+      WHATSAPP_PROVIDER: ${WHATSAPP_PROVIDER:-evolution}
+      EVOLUTION_URL: http://evolution:8080
+      EVOLUTION_API_KEY: ${EVOLUTION_API_KEY:-cambia-esta-clave}
+      WEBHOOK_BASE_URL: http://server:4000
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      DEMO_AUTO_LEADS: "false"
+    ports:
+      - "127.0.0.1:4000:4000"
+
+  n8n:
+    image: n8nio/n8n:latest
+    restart: unless-stopped
+    environment:
+      N8N_HOST: ${N8N_HOST:-localhost}
+      N8N_PORT: 5678
+      WEBHOOK_URL: ${N8N_PUBLIC_URL:-http://localhost:5678}
+      GENERIC_TIMEZONE: America/Bogota
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: ${N8N_USER:-admin}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_PASSWORD:-cambia-esta-clave}
+    volumes:
+      - n8ndata:/home/node/.n8n
+    ports:
+      - "127.0.0.1:5678:5678"
+
+volumes:
+  pgdata:
+  redisdata:
+  evolution_instances:
+  n8ndata:

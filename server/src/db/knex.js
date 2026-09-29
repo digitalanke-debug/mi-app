@@ -1,4 +1,6 @@
 import knexLib from 'knex'
+import fs from 'node:fs'
+import path from 'node:path'
 import { config } from '../config.js'
 
 export function knexConfig() {
@@ -10,6 +12,7 @@ export function knexConfig() {
       migrations: { directory: new URL('./migrations', import.meta.url).pathname },
     }
   }
+  fs.mkdirSync(path.dirname(config.sqlitePath), { recursive: true })
   return {
     client: 'better-sqlite3',
     connection: { filename: config.sqlitePath },

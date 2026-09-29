@@ -4,10 +4,22 @@ CRM comercial para varias empresas con WhatsApp Business conectado por **QR** (s
 
 ## Demo en 1 minuto
 
+Requisitos: Node.js 20 o superior (https://nodejs.org, versión LTS) y Git.
+
 ```bash
+git clone https://github.com/digitalanke-debug/mi-app.git
+cd mi-app
+git checkout claude/epic-tesla-80pp6u   # rama con el CRM (hasta que se fusione a main)
 npm install
 npm run demo        # migra la base SQLite, carga datos demo y levanta API + web
 ```
+
+Si ya lo habías clonado, actualiza con `git pull` y vuelve a correr `npm install`.
+
+Problemas frecuentes:
+- `Cannot open database because the directory does not exist`: actualiza el repositorio, ya está corregido.
+- Error compilando `better-sqlite3` en Windows: instala Node LTS desde nodejs.org (trae los binarios precompilados) o ejecuta `npm install` de nuevo.
+- `EADDRINUSE 4000` o `5173`: hay otro programa usando ese puerto; cierra la terminal anterior donde corría la demo.
 
 Abre http://localhost:5173 y entra con `admin@demo.com` / `demo1234` (también `kevin@demo.com` y `laura@demo.com` como asesores).
 

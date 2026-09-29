@@ -15,7 +15,7 @@ En modo demo no hace falta Docker, PostgreSQL ni un celular: el QR es simulado, 
 
 ## Qué incluye
 
-- **Multiempresa**: 4 empresas demo (Núcleo Pensional, Abogado Fiduciario, SGO Consultores, Piensa Financiero), cada una con sus números de WhatsApp, pipeline, etiquetas, respuestas rápidas, automatizaciones y agente IA. Los usuarios ven solo las empresas que tienen asignadas.
+- **Multiempresa**: 4 empresas demo (Núcleo Pensional, Abogado Fiduciario, Piensas - Fogainc, DDI), cada una con sus números de WhatsApp, pipeline, etiquetas, respuestas rápidas, automatizaciones y agente IA. Los usuarios ven solo las empresas que tienen asignadas.
 - **Bandeja en vivo** (Socket.io): filtros por estado, mías, sin asignar; chat con respuestas rápidas (`/atajo`), notas internas, tareas, etiquetas, etapa, valor y servicio.
 - **Tiempos**: esperando respuesta, abierta hace, primera respuesta, tiempo en etapa. Alertas por inactividad.
 - **Pipeline kanban** con arrastrar y soltar, valor por etapa y tiempo en etapa.

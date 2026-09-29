@@ -10,12 +10,12 @@ const COMPANIES = [
   { name: 'Abogado Fiduciario', slug: 'abogado-fiduciario', color: '#7c3aed', sector: 'Servicios jurídicos',
     description: 'Abogados especializados en fiducia, patrimonio autónomo, sucesiones y protección patrimonial.',
     services: ['Fiducia mercantil', 'Sucesión', 'Protección patrimonial', 'Consulta jurídica'] },
-  { name: 'SGO Consultores', slug: 'sgo', color: '#059669', sector: 'Consultoría empresarial',
-    description: 'Implementación de sistemas de gestión, SG-SST, calidad y auditorías para empresas.',
-    services: ['SG-SST', 'ISO 9001', 'Auditoría', 'Capacitación'] },
-  { name: 'Piensa Financiero', slug: 'piensa', color: '#ea580c', sector: 'Educación financiera',
-    description: 'Programas de educación financiera, planeación de retiro y acompañamiento de inversión.',
-    services: ['Plan de retiro', 'Curso finanzas personales', 'Asesoría inversión'] },
+  { name: 'Piensas - Fogainc', slug: 'piensas-fogainc', color: '#ea580c', sector: 'Asesoría pensional y financiera',
+    description: 'Acompañamiento en pensiones, planeación de retiro y asesoría financiera. (Editar descripción y servicios en Configuración.)',
+    services: ['Asesoría pensional', 'Plan de retiro', 'Consulta financiera'] },
+  { name: 'DDI', slug: 'ddi', color: '#059669', sector: 'Servicios',
+    description: 'Empresa DDI. (Editar descripción y servicios en Configuración para que el agente IA responda con información real.)',
+    services: ['Consulta general', 'Cotización', 'Soporte'] },
 ]
 
 const STAGES = [
@@ -47,15 +47,15 @@ const OPENERS = {
     'Hola, quiero iniciar una sucesión, ¿cuánto vale la consulta?',
     'Necesito un abogado para revisar un contrato de fiducia mercantil',
   ],
-  sgo: [
-    'Hola, somos una empresa de 40 empleados y necesitamos implementar SG-SST',
-    'Buenas, ¿ustedes hacen auditoría ISO 9001? Necesito cotización',
-    'Quiero capacitar a mi equipo en seguridad y salud en el trabajo',
-  ],
-  piensa: [
-    'Hola, vi el curso de finanzas personales en Instagram, ¿cuánto cuesta?',
+  'piensas-fogainc': [
+    'Hola, quiero saber cómo va mi trámite de pensión, ¿me pueden asesorar?',
     'Quiero un plan de retiro, tengo 35 años',
-    'Buenas, ¿cómo funciona la asesoría de inversión?',
+    'Buenas, ¿cómo funciona la asesoría financiera?',
+  ],
+  ddi: [
+    'Buenas tardes, quiero información de sus servicios',
+    'Hola, necesito una cotización',
+    'Vi su anuncio en Google, ¿me pueden contactar?',
   ],
 }
 

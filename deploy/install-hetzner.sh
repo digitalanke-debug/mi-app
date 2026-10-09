@@ -93,24 +93,7 @@ docker compose exec -T server node server/src/db/migrate.js
 if [ "${SEED:-yes}" = "yes" ]; then docker compose exec -T server node server/src/db/seed.js || true; fi
 echo "https://$DOMAIN" > /root/CRM_URL.txt
 
-echo "==> Configurando Caddy para $DOMAIN (CRM en /, registro en /install.log)"
-cat > /etc/caddy/Caddyfile <<CADDY
-$DOMAIN {
-    encode gzip
-    handle /install.log {
-        root * $STATUS_DIR
-        file_server
-    }
-    handle /autodeploy.log {
-        root * $STATUS_DIR
-        file_server
-    }
-    handle {
-        reverse_proxy localhost:4000
-    }
-}
-CADDY
-systemctl reload caddy || systemctl restart caddy
+# La configuración final de Caddy (dominio propio + respaldo por IP) la aplica deploy/hostops.sh en cada despliegue.
 
 echo "==> Actualización automática: cada 5 minutos revisa GitHub y despliega si hay cambios (systemd timer)"
 cp "$APP_DIR/deploy/autodeploy.sh" /usr/local/bin/crm-autodeploy && chmod +x /usr/local/bin/crm-autodeploy

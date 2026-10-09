@@ -26,11 +26,17 @@ ufw allow OpenSSH && ufw allow 80/tcp && ufw allow 443/tcp && ufw --force enable
 
 echo "==> Instalando Caddy (HTTPS automático)"
 if ! command -v caddy >/dev/null; then
-  apt-get install -y debian-keyring debian-archive-keyring apt-transport-https
-  curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-  curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list >/dev/null
-  apt-get update -y && apt-get install -y caddy
+  # Repositorio de Ubuntu (universe). Si falla, binario oficial descargado directamente.
+  apt-get install -y caddy || {
+    curl -fsSL "https://caddyserver.com/api/download?os=linux&arch=amd64" -o /usr/bin/caddy && chmod +x /usr/bin/caddy
+    groupadd --system caddy 2>/dev/null || true
+    useradd --system --gid caddy --create-home --home-dir /var/lib/caddy --shell /usr/sbin/nologin caddy 2>/dev/null || true
+    mkdir -p /etc/caddy
+    curl -fsSL https://raw.githubusercontent.com/caddyserver/dist/master/init/caddy.service -o /etc/systemd/system/caddy.service
+    systemctl daemon-reload
+  }
 fi
+mkdir -p /etc/caddy
 
 echo "==> Página de estado mientras se instala: https://$DOMAIN/install.log"
 mkdir -p "$STATUS_DIR"

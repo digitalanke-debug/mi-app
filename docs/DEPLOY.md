@@ -12,11 +12,18 @@ El hosting cPanel compartido **no sirve** para este CRM: necesita procesos Node 
 
 Al crear el servidor en la consola de Hetzner, en el campo **Cloud config** pegar el contenido de `deploy/cloud-init.yaml`. Requiere que el repositorio sea público (o cambiar la URL por una con token). En 5 a 8 minutos el CRM queda en `https://<IP>.sslip.io` con HTTPS, sin dominio propio. El registro de la instalación queda en `/root/install.log` del servidor.
 
-### Dominio propio después
+### Dominio propio (automático)
 
-1. Crear en el DNS un registro A `crm.tudominio.com` → IP del servidor.
-2. En el servidor: `nano /etc/caddy/Caddyfile`, cambiar la primera línea por `crm.tudominio.com {`, y `systemctl reload caddy`.
-3. En `/opt/crm/.env` cambiar `PUBLIC_URL` y `EVOLUTION_PUBLIC_URL` al dominio nuevo y ejecutar `cd /opt/crm && docker compose up -d`.
+El dominio del CRM se define en `deploy/domain.txt` del repositorio (actualmente `crm.sygoabogados.com`). En cada despliegue, el servidor comprueba si ese dominio ya apunta a su IP; cuando lo hace, agrega el dominio a Caddy y emite el certificado HTTPS solo. El dominio por IP (`<IP>.sslip.io`) sigue funcionando como respaldo.
+
+Pasos para activarlo:
+1. En el DNS del dominio crear un registro **A** con nombre `crm` y valor la IP del servidor (TTL 300).
+2. Esperar la propagación (5 a 30 minutos). El estado se ve en `https://<IP>.sslip.io/hostops.log`.
+3. El siguiente despliegue (cualquier commit, o manualmente `crm-autodeploy --force` en el servidor) activa el dominio.
+
+## Actualizaciones automáticas
+
+Cada 5 minutos el servidor revisa la rama configurada en GitHub. Si hay commits nuevos: descarga, reconstruye los contenedores, aplica migraciones y recarga. Registro en `https://<IP>.sslip.io/autodeploy.log`. Para forzar: `crm-autodeploy --force`.
 
 ## 1b. Instalación automática en Hetzner
 

@@ -23,7 +23,9 @@ echo "==> Firewall: solo SSH, HTTP y HTTPS"
 ufw allow OpenSSH && ufw allow 80/tcp && ufw allow 443/tcp && ufw --force enable
 
 echo "==> Instalando Docker"
-command -v docker >/dev/null || curl -fsSL https://get.docker.com | sh
+if ! command -v docker >/dev/null; then
+  curl -fsSL https://get.docker.com | sh || apt-get install -y docker.io docker-compose-v2
+fi
 
 echo "==> Instalando Caddy (HTTPS automático)"
 if ! command -v caddy >/dev/null; then
@@ -66,7 +68,13 @@ CADDY
 systemctl reload caddy || systemctl restart caddy
 
 echo "==> Levantando contenedores (esto tarda unos minutos la primera vez)"
-docker compose up -d --build
+RAM_MB=$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo)
+if [ "$RAM_MB" -lt 6000 ]; then
+  echo "    Servidor con ${RAM_MB} MB de RAM: se omite n8n (se activa luego con: docker compose up -d n8n)"
+  docker compose up -d --build postgres redis evolution server
+else
+  docker compose up -d --build
+fi
 sleep 15
 docker compose exec -T server node server/src/db/migrate.js
 if [ "${SEED:-yes}" = "yes" ]; then docker compose exec -T server node server/src/db/seed.js || true; fi

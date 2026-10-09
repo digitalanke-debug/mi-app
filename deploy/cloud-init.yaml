@@ -1,0 +1,12 @@
+#cloud-config
+# Pegar este contenido completo en el campo "Cloud config" al crear el servidor en Hetzner
+# (Ubuntu 24.04). El servidor se instala solo en 5 a 8 minutos. Al terminar, el CRM queda en
+# https://<IP-del-servidor>.sslip.io  (la IP aparece en la consola de Hetzner).
+# Para usar dominio propio después: ver docs/DEPLOY.md, sección "Dominio".
+package_update: true
+packages:
+  - git
+  - curl
+runcmd:
+  - [ bash, -c, "curl -fsSL https://raw.githubusercontent.com/digitalanke-debug/mi-app/claude/epic-tesla-80pp6u/deploy/install-hetzner.sh -o /root/install.sh" ]
+  - [ bash, -c, "bash /root/install.sh https://github.com/digitalanke-debug/mi-app.git auto claude/epic-tesla-80pp6u > /root/install.log 2>&1" ]

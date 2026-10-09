@@ -8,6 +8,16 @@ El hosting cPanel compartido **no sirve** para este CRM: necesita procesos Node 
 - Ubuntu 24.04. Instalar Docker: `curl -fsSL https://get.docker.com | sh`.
 - DNS: crear `crm.tudominio.com` apuntando a la IP del VPS (y `n8n.tudominio.com` si se usa n8n).
 
+## 1a. Instalación sin terminal (Cloud config)
+
+Al crear el servidor en la consola de Hetzner, en el campo **Cloud config** pegar el contenido de `deploy/cloud-init.yaml`. Requiere que el repositorio sea público (o cambiar la URL por una con token). En 5 a 8 minutos el CRM queda en `https://<IP>.sslip.io` con HTTPS, sin dominio propio. El registro de la instalación queda en `/root/install.log` del servidor.
+
+### Dominio propio después
+
+1. Crear en el DNS un registro A `crm.tudominio.com` → IP del servidor.
+2. En el servidor: `nano /etc/caddy/Caddyfile`, cambiar la primera línea por `crm.tudominio.com {`, y `systemctl reload caddy`.
+3. En `/opt/crm/.env` cambiar `PUBLIC_URL` y `EVOLUTION_PUBLIC_URL` al dominio nuevo y ejecutar `cd /opt/crm && docker compose up -d`.
+
 ## 1b. Instalación automática en Hetzner
 
 Hay un script que hace los pasos 1 a 3 y 7 solo:

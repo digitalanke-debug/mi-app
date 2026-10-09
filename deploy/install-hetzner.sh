@@ -4,9 +4,16 @@
 set -euo pipefail
 
 REPO="${1:?Falta la URL del repositorio git}"
-DOMAIN="${2:?Falta el dominio del CRM, ej. crm.tudominio.com}"
+DOMAIN="${2:-auto}"
 BRANCH="${3:-main}"
 APP_DIR=/opt/crm
+
+# Sin dominio: usa la IP pública con sslip.io (ej. 1.2.3.4.sslip.io) y HTTPS igual funciona.
+if [ "$DOMAIN" = "auto" ]; then
+  IP=$(curl -fs http://169.254.169.254/hetzner/v1/metadata/public-ipv4 || curl -fs https://api.ipify.org)
+  DOMAIN="${IP}.sslip.io"
+  echo "==> Sin dominio propio: el CRM quedará en https://$DOMAIN"
+fi
 
 echo "==> Actualizando sistema"
 apt-get update -y && apt-get upgrade -y
@@ -60,8 +67,10 @@ systemctl reload caddy || systemctl restart caddy
 
 echo "==> Levantando contenedores (esto tarda unos minutos la primera vez)"
 docker compose up -d --build
-sleep 10
+sleep 15
 docker compose exec -T server node server/src/db/migrate.js
+if [ "${SEED:-yes}" = "yes" ]; then docker compose exec -T server node server/src/db/seed.js || true; fi
+echo "https://$DOMAIN" > /root/CRM_URL.txt
 
 echo "==> Respaldo diario de la base de datos a /opt/crm/backups"
 mkdir -p backups

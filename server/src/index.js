@@ -46,6 +46,10 @@ const server = http.createServer(app)
 initRealtime(server, config.clientOrigin)
 
 await db.migrate.latest()
+if (config.seedOnEmpty) {
+  const u = await db('users').count('id as n').first()
+  if (!Number(u?.n)) { console.log('Base vacía: cargando datos demo…'); await import('./db/seed.js') }
+}
 setInterval(() => checkInactivity().catch((e) => console.error('inactivity:', e.message)), 60_000)
 if (config.whatsappProvider === 'demo' && config.demoAutoLeads) startDemoSimulator({ everyMs: 90_000 })
 

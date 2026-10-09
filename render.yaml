@@ -1,0 +1,28 @@
+# Despliegue gratuito en Render.com (Blueprint). Base de datos: Neon (gratis) o Render Postgres.
+services:
+  - type: web
+    name: crm-whatsapp
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DB_CLIENT
+        value: pg
+      - key: DATABASE_URL
+        sync: false   # pegar la URL de Neon al crear el servicio
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CLIENT_ORIGIN
+        value: https://crm-whatsapp.onrender.com   # cambiar por el dominio propio después
+      - key: WHATSAPP_PROVIDER
+        value: demo
+      - key: SEED_ON_EMPTY
+        value: "true"
+      - key: DEMO_AUTO_LEADS
+        value: "false"
+      - key: ANTHROPIC_API_KEY
+        sync: false

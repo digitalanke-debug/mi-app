@@ -21,4 +21,5 @@ export const config = {
   },
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
   demoAutoLeads: process.env.DEMO_AUTO_LEADS !== 'false',
+  seedOnEmpty: process.env.SEED_ON_EMPTY === 'true',
 }

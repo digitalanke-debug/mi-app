@@ -177,4 +177,4 @@ async function run() {
 }
 
 await run()
-await db.destroy()
+if (process.argv[1]?.endsWith('seed.js')) await db.destroy()

@@ -51,6 +51,11 @@ docs/DEPLOY.md        guía de despliegue en VPS con Docker
 docs/ARQUITECTURA.md  decisiones técnicas y modelo de datos
 ```
 
+## Publicar
+
+- Gratis para pruebas (sin WhatsApp real): [docs/DEPLOY-GRATIS.md](docs/DEPLOY-GRATIS.md) con Render + Neon.
+- Producción completa con WhatsApp por QR: [docs/DEPLOY.md](docs/DEPLOY.md) en un VPS (Hetzner) con Docker.
+
 ## Producción
 
 Ver [docs/DEPLOY.md](docs/DEPLOY.md). Resumen: VPS con Docker, `docker compose up -d`, dominio con HTTPS, y en la sección WhatsApp del CRM se escanea el QR real de cada número.

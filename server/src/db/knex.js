@@ -7,7 +7,7 @@ export function knexConfig() {
   if (config.dbClient === 'pg') {
     return {
       client: 'pg',
-      connection: config.databaseUrl,
+      connection: { connectionString: config.databaseUrl, ssl: /sslmode=require|neon\.tech|render\.com/.test(config.databaseUrl) ? { rejectUnauthorized: false } : false },
       pool: { min: 1, max: 10 },
       migrations: { directory: new URL('./migrations', import.meta.url).pathname },
     }

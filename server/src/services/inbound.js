@@ -2,6 +2,8 @@ import { db, now } from '../db/knex.js'
 import { emitCompany } from './realtime.js'
 import { loadConversation, logActivity } from './conversations.js'
 import { fire } from './automations.js'
+import { saveMedia } from './media.js'
+import { providerFor } from './whatsapp/index.js'
 
 /**
  * Detecta código de campaña en el primer mensaje.
@@ -21,7 +23,7 @@ export function detectSource(text) {
  * Punto único de entrada de mensajes entrantes (Evolution, demo, o cualquier proveedor futuro).
  * Crea/actualiza contacto y conversación, guarda el mensaje, emite tiempo real y dispara automatizaciones.
  */
-export async function handleInbound(inst, { phone, name, body, type = 'text', waMessageId = null, adReferral = null }) {
+export async function handleInbound(inst, { phone, name, body, type = 'text', waMessageId = null, adReferral = null, media = null }) {
   const company = await db('companies').where({ id: inst.company_id }).first()
   const cleanPhone = String(phone).replace(/\D/g, '')
 
@@ -56,7 +58,16 @@ export async function handleInbound(inst, { phone, name, body, type = 'text', wa
     conv = await db('conversations').where({ id: conv.id }).first()
   }
 
-  const [mrow] = await db('messages').insert({ conversation_id: conv.id, direction: 'in', sender_type: 'contact', type, body, wa_message_id: waMessageId, status: 'delivered', created_at: ts }).returning('id')
+  let saved = null
+  if (media) {
+    try {
+      let b64 = media.base64
+      if (!b64 && waMessageId) { const r = await providerFor(inst).fetchMediaBase64(inst, waMessageId); if (r) { b64 = r.base64; media.mime = media.mime || r.mime } }
+      if (b64) saved = saveMedia({ base64: b64, mime: media.mime, name: media.name })
+    } catch (e) { console.error('No se pudo guardar el medio entrante:', e.message) }
+  }
+  const [mrow] = await db('messages').insert({ conversation_id: conv.id, direction: 'in', sender_type: 'contact', type, body: body || (saved ? '' : (type !== 'text' ? `[${type}]` : '')), wa_message_id: waMessageId, status: 'delivered', created_at: ts,
+    media_url: saved?.url || null, media_name: saved?.name || media?.name || null, media_mime: saved?.mime || media?.mime || null, media_size: saved?.size || null }).returning('id')
   const message = await db('messages').where({ id: mrow.id ?? mrow }).first()
   emitCompany(company.id, 'message:new', { ...message, company_id: company.id })
   emitCompany(company.id, 'conversation:update', await loadConversation(conv.id))

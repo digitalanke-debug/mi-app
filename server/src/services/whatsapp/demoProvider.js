@@ -39,6 +39,9 @@ export const demoProvider = {
 
   async status(inst) { return inst.status },
 
+  async sendMedia() { return { id: `demo-${Date.now()}` } },
+  async fetchMediaBase64() { return null },
+
   async sendText(inst, phone, body) {
     return { id: `demo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` }
   },

@@ -49,12 +49,27 @@ services:
     ports:
       - "127.0.0.1:8080:8080"
 
+  # Tareas en el host en cada despliegue: dominio en Caddy y script de autodespliegue (ver deploy/hostops.sh)
+  hostops:
+    image: caddy:2-alpine
+    restart: "no"
+    network_mode: host
+    entrypoint: ["/bin/sh", "/app/deploy/hostops.sh"]
+    volumes:
+      - ./deploy:/app/deploy:ro
+      - /etc/caddy:/host/etc/caddy
+      - /var/log:/host/var/log
+      - /var/www/status:/host/var/www/status
+      - /usr/local/bin:/host/usr/local/bin
+
   server:
     build: .
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
+      hostops:
+        condition: service_completed_successfully
     environment:
       PORT: 4000
       JWT_SECRET: ${JWT_SECRET:-cambia-esto-por-una-clave-larga}
@@ -67,6 +82,9 @@ services:
       WEBHOOK_BASE_URL: http://server:4000
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       DEMO_AUTO_LEADS: "false"
+      UPLOAD_DIR: /data/uploads
+    volumes:
+      - uploads:/data/uploads
     ports:
       - "127.0.0.1:4000:4000"
 
@@ -87,6 +105,7 @@ services:
       - "127.0.0.1:5678:5678"
 
 volumes:
+  uploads:
   pgdata:
   redisdata:
   evolution_instances:

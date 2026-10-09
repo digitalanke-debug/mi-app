@@ -26,3 +26,4 @@ dist-ssr
 # CRM
 .env
 server/data/*.sqlite*
+server/uploads/

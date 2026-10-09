@@ -10,6 +10,12 @@ export function StoreProvider({ children }) {
   const [companyId, setCompanyIdState] = useState(() => { try { return Number(localStorage.getItem('crm_company')) || null } catch { return null } })
   const [loading, setLoading] = useState(!!getToken())
   const [toasts, setToasts] = useState([])
+  const [theme, setThemeState] = useState(() => { try { return localStorage.getItem('crm_theme') || (window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') } catch { return 'light' } })
+  const [prefs, setPrefsState] = useState(() => { try { return { notify: true, sound: true, ...JSON.parse(localStorage.getItem('crm_prefs') || '{}') } } catch { return { notify: true, sound: true } } })
+  useEffect(() => { document.documentElement.setAttribute('data-theme', theme); try { localStorage.setItem('crm_theme', theme) } catch {} }, [theme])
+  const setTheme = useCallback((t) => setThemeState(t), [])
+  const setPrefs = useCallback((p) => setPrefsState((cur) => { const n = { ...cur, ...p }; try { localStorage.setItem('crm_prefs', JSON.stringify(n)) } catch {}; return n }), [])
+  const prefsRef = useRef(prefs); prefsRef.current = prefs
   const socketRef = useRef(null)
   const listeners = useRef(new Map())
 
@@ -50,6 +56,14 @@ export function StoreProvider({ children }) {
     const forward = (event) => (payload) => listeners.current.get(event)?.forEach((fn) => fn(payload))
     for (const ev of ['message:new', 'conversation:update', 'instance:update', 'notification', 'typing']) s.on(ev, forward(ev))
     s.on('notification', (n) => toast(n.body, 'warn'))
+    s.on('message:new', (m) => {
+      if (m.direction !== 'in') return
+      const p = prefsRef.current
+      if (p.sound) beep()
+      if (p.notify && 'Notification' in window && Notification.permission === 'granted' && document.visibilityState !== 'visible') {
+        try { const n = new Notification('Nuevo mensaje de WhatsApp', { body: (m.body || 'Archivo adjunto').slice(0, 120), tag: `conv-${m.conversation_id}` }); n.onclick = () => { window.focus(); window.location.hash = ''; window.location.pathname = `/bandeja/${m.conversation_id}` } } catch {}
+      }
+    })
     return () => s.disconnect()
   }, [user, toast])
 
@@ -60,12 +74,28 @@ export function StoreProvider({ children }) {
   }, [])
 
   const company = useMemo(() => companies.find((c) => c.id === companyId) || null, [companies, companyId])
-  const value = useMemo(() => ({ user, companies, company, companyId, setCompanyId, login, logout, loading, subscribe, toast, toasts, refreshCompanies, socket: socketRef }),
-    [user, companies, company, companyId, setCompanyId, login, logout, loading, subscribe, toast, toasts, refreshCompanies])
+  const value = useMemo(() => ({ user, companies, company, companyId, setCompanyId, login, logout, loading, subscribe, toast, toasts, refreshCompanies, socket: socketRef, theme, setTheme, prefs, setPrefs }),
+    [user, companies, company, companyId, setCompanyId, login, logout, loading, subscribe, toast, toasts, refreshCompanies, theme, setTheme, prefs, setPrefs])
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
 
 export const useStore = () => useContext(Ctx)
+
+/** Sonido corto de aviso (sin archivos externos) */
+let audioCtx = null
+export function beep() {
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)()
+    const o = audioCtx.createOscillator(); const g = audioCtx.createGain()
+    o.type = 'sine'; o.frequency.setValueAtTime(880, audioCtx.currentTime); o.frequency.setValueAtTime(1175, audioCtx.currentTime + 0.09)
+    g.gain.setValueAtTime(0.0001, audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.25, audioCtx.currentTime + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.25)
+    o.connect(g).connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime + 0.26)
+  } catch {}
+}
+
+export function requestNotifications() {
+  if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission()
+}
 
 /** Suscribe a un evento del socket mientras el componente esté montado */
 export function useRealtime(event, fn) {

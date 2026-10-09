@@ -72,6 +72,15 @@ whatsappRouter.post('/demo/reply/:conversationId', requireAuth, async (req, res)
   const r = await simulateReply(req.params.conversationId, req.body?.text)
   res.json({ ok: true, message_id: r.message.id })
 })
+// Demo: el cliente envía una imagen de prueba
+whatsappRouter.post('/demo/media/:conversationId', requireAuth, async (req, res) => {
+  const conv = await db('conversations').where({ id: req.params.conversationId }).first()
+  const inst = await db('whatsapp_instances').where({ id: conv.instance_id }).first()
+  const contact = await db('contacts').where({ id: conv.contact_id }).first()
+  const png = 'iVBORw0KGgoAAAANSUhEUgAAAIAAAABACAIAAABOx7AjAAAAgElEQVR42u3QMQEAAAgDoGk/aa/BBWQcVKkAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAtwG9JgABGZ6+NwAAAABJRU5ErkJggg=='
+  const r = await handleInbound(inst, { phone: contact.phone, name: contact.name, body: 'Te envío el documento', type: 'image', media: { base64: png, mime: 'image/png', name: 'cedula.png' } })
+  res.json({ ok: true, message_id: r.message.id })
+})
 whatsappRouter.get('/demo/simulator', requireAuth, (req, res) => res.json({ running: simulatorRunning() }))
 whatsappRouter.post('/demo/simulator', requireAuth, (req, res) => {
   if (req.body?.running) startDemoSimulator({ everyMs: Number(req.body.everyMs) || 60_000 }); else stopDemoSimulator()

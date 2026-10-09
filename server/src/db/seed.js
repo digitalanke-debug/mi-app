@@ -126,11 +126,11 @@ async function run() {
       { company_id: companyId, name: 'Sin respuesta 2 horas', trigger: 'inactivity', conditions: JSON.stringify({ minutes: 120, who: 'us' }), enabled: true,
         actions: JSON.stringify([{ type: 'add_tag', tag_name: 'Sin respuesta' }, { type: 'notify', body: 'Lead lleva más de 2 horas sin respuesta' }]) },
       { company_id: companyId, name: 'Agente IA responde primero', trigger: 'message_in', conditions: JSON.stringify({ unassigned_only: false, ai_only_when_no_human_reply_minutes: 3 }),
-        actions: JSON.stringify([{ type: 'ai_reply' }]), enabled: ci <= 2 },
+        actions: JSON.stringify([{ type: 'ai_reply' }]), enabled: false },
     ])
 
     await db('ai_settings').insert({
-      company_id: companyId, enabled: true, model: 'claude-opus-5-5', agent_name: `Asistente ${c.name}`,
+      company_id: companyId, enabled: false, model: 'claude-opus-5-5', agent_name: `Asistente ${c.name}`,
       instructions: `Eres el asistente virtual de ${c.name} (${c.sector}). Responde en español colombiano, de forma cálida, breve y profesional. Tu objetivo es entender la necesidad del cliente, calificar el lead (nombre, ciudad, servicio de interés) y agendar una llamada con un asesor. No inventes precios ni promesas legales; si preguntan por costos exactos o casos complejos, indica que un asesor humano confirmará y usa la herramienta de entrega a humano.`,
       knowledge: `Servicios: ${c.services.join(', ')}.\nHorario: lunes a viernes 8:00 a.m. a 6:00 p.m.\nCiudad principal: Bogotá, atención virtual en toda Colombia.\nPrimera consulta: sin costo, 20 minutos por videollamada.\nDocumentos usuales: cédula y documentos del caso.`,
     })

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { NavLink, Outlet } from 'react-router-dom'
-import { useRealtime, useStore } from '../store.jsx'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { useRealtime, useStore, requestNotifications } from '../store.jsx'
 import { api, initials } from '../api.js'
 import { Icon } from './Icons.jsx'
 
@@ -17,8 +17,12 @@ const NAV = [
 ]
 
 export default function Layout() {
-  const { user, companies, company, companyId, setCompanyId, logout, toasts } = useStore()
+  const { user, companies, company, companyId, setCompanyId, logout, toasts, theme, setTheme, prefs, setPrefs } = useStore()
   const [unread, setUnread] = useState(0)
+  const [open, setOpen] = useState(false)
+  const loc = useLocation()
+  useEffect(() => { setOpen(false) }, [loc.pathname])
+  useEffect(() => { if (prefs.notify) requestNotifications() }, [prefs.notify])
 
   const loadUnread = () => companyId && api('/conversations', { params: { company_id: companyId, status: 'open' } })
     .then((list) => setUnread(list.reduce((a, c) => a + (c.unread_count || 0), 0))).catch(() => {})
@@ -27,7 +31,13 @@ export default function Layout() {
 
   return (
     <div className="app">
-      <aside className="sidebar">
+      <div className="topbar">
+        <button className="btn btn-ghost btn-icon" onClick={() => setOpen(true)} aria-label="Menú"><Icon name="menu" size={20} /></button>
+        <div className="brand"><div className="logo"><Icon name="wa" size={17} strokeWidth={2} /></div> {company?.name || 'CRM'}</div>
+        <NavLink to="/bandeja" className="btn btn-ghost btn-icon" aria-label="Bandeja"><Icon name="inbox" size={20} />{unread > 0 && <span className="badge" style={{ marginLeft: 4 }}>{unread}</span>}</NavLink>
+      </div>
+      <div className={`sidebar-bg ${open ? 'open' : ''}`} onClick={() => setOpen(false)} />
+      <aside className={`sidebar ${open ? 'open' : ''}`}>
         <div className="brand"><div className="logo"><Icon name="wa" size={17} strokeWidth={2} /></div> CRM WhatsApp</div>
         <select className="company-select" value={companyId || ''} onChange={(e) => setCompanyId(Number(e.target.value))}>
           {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -41,7 +51,12 @@ export default function Layout() {
           ))}
         </nav>
         <div className="spacer" />
-        {company && <div className="small muted" style={{ padding: '0 10px' }}>Empresa activa: <b style={{ color: company.color }}>{company.name}</b></div>}
+        <div className="theme-row"><Icon name={theme === 'dark' ? 'moon' : 'sun'} size={15} /> {theme === 'dark' ? 'Modo oscuro' : 'Modo claro'}
+          <button className="btn btn-ghost btn-sm" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>Cambiar</button></div>
+        <div className="theme-row"><Icon name="bell" size={15} /> Avisos
+          <button className={`toggle ${prefs.notify ? 'on' : ''}`} style={{ marginLeft: 'auto' }} title="Notificaciones de escritorio" onClick={() => setPrefs({ notify: !prefs.notify })} />
+          <button className={`toggle ${prefs.sound ? 'on' : ''}`} title="Sonido" onClick={() => setPrefs({ sound: !prefs.sound })} /></div>
+        {company && <div className="small muted" style={{ padding: '6px 10px 0' }}>Empresa activa: <b style={{ color: company.color }}>{company.name}</b></div>}
         <div className="userbox">
           <div className="avatar sm">{initials(user.name)}</div>
           <div><div className="name">{user.name}</div><div className="role">{user.role === 'admin' ? 'Administrador' : 'Asesor'}</div></div>

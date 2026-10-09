@@ -69,6 +69,18 @@ conversationsRouter.post('/:id/messages', canAccess, async (req, res) => {
   res.json(msg)
 })
 
+// Enviar archivo (imagen, audio, documento). body: { base64, mime, name, caption }
+conversationsRouter.post('/:id/media', canAccess, async (req, res) => {
+  const { base64, mime, name, caption } = req.body || {}
+  if (!base64) return res.status(400).json({ error: 'Falta el archivo' })
+  const conv = req.conv
+  if (!conv.assigned_user_id) await db('conversations').where({ id: conv.id }).update({ assigned_user_id: req.user.id })
+  try {
+    const msg = await sendOutbound(conv.id, { body: caption || '', senderType: 'user', userId: req.user.id, media: { base64, mime, name } })
+    res.json(msg)
+  } catch (e) { res.status(400).json({ error: e.message }) }
+})
+
 conversationsRouter.post('/:id/read', canAccess, async (req, res) => {
   await db('conversations').where({ id: req.conv.id }).update({ unread_count: 0 })
   await broadcastConversation(req.conv.id)

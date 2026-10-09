@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useRealtime, useStore } from '../store.jsx'
-import { api, ago, fmtDate, fmtDateTime, fmtTime, initials, SOURCE_LABEL } from '../api.js'
+import { api, ago, fmtDate, fmtDateTime, fmtTime, initials, SOURCE_LABEL, getToken } from '../api.js'
 import { Icon } from '../components/Icons.jsx'
 
 const FILTERS = [['open', 'Abiertas'], ['mine', 'Mías'], ['unassigned', 'Sin asignar'], ['pending', 'Pendientes'], ['closed', 'Cerradas'], ['all', 'Todas']]
@@ -44,8 +44,10 @@ export default function Inbox() {
     })
   })
 
+  const [showPanel, setShowPanel] = useState(false)
+  useEffect(() => { setShowPanel(false) }, [selectedId])
   return (
-    <div className="inbox">
+    <div className={`inbox ${selectedId ? 'view-chat' : 'view-list'} ${showPanel ? 'show-panel' : ''}`}>
       <div className="inbox-list">
         <div className="head">
           <div className="search"><Icon name="search" size={15} /><input className="input" placeholder="Buscar por nombre o teléfono" value={q} onChange={(e) => setQ(e.target.value)} /></div>
@@ -70,18 +72,22 @@ export default function Inbox() {
           ))}
         </div>
       </div>
-      {selectedId ? <Chat key={selectedId} id={selectedId} meta={meta} onChanged={load} /> : <div className="chat"><div className="empty" style={{ margin: 'auto' }}>Selecciona una conversación</div></div>}
+      {selectedId ? <Chat key={selectedId} id={selectedId} meta={meta} onChanged={load} onBack={() => nav('/bandeja')} onTogglePanel={() => setShowPanel((v) => !v)} /> : <div className="chat"><div className="empty" style={{ margin: 'auto' }}>Selecciona una conversación</div></div>}
     </div>
   )
 }
 
-function Chat({ id, meta, onChanged }) {
-  const { user, toast } = useStore()
+function Chat({ id, meta, onChanged, onBack, onTogglePanel }) {
+  const { user, toast, company } = useStore()
   const [data, setData] = useState(null)
   const [text, setText] = useState('')
   const [typing, setTyping] = useState(null)
   const [showQuick, setShowQuick] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [attach, setAttach] = useState(null) // { base64, mime, name, preview }
+  const [pop, setPop] = useState(null) // 'emoji' | 'tpl' | null
+  const [lightbox, setLightbox] = useState(null)
+  const fileRef = useRef(null)
   const endRef = useRef(null)
 
   const load = useCallback(() => api(`/conversations/${id}`).then((d) => { setData(d); api(`/conversations/${id}/read`, { method: 'POST' }).catch(() => {}) }).catch((e) => toast(e.message, 'error')), [id, toast])
@@ -93,10 +99,26 @@ function Chat({ id, meta, onChanged }) {
   useRealtime('typing', (t) => { if (t.conversationId === id && t.user !== user.name) { setTyping(t.user); setTimeout(() => setTyping(null), 2500) } })
 
   const send = async () => {
-    const body = text.trim(); if (!body) return
-    setText(''); setShowQuick(false)
-    try { await api(`/conversations/${id}/messages`, { method: 'POST', body: { body } }); await load() } catch (e) { toast(e.message, 'error') }
+    const body = text.trim()
+    if (!body && !attach) return
+    setText(''); setShowQuick(false); setPop(null)
+    try {
+      if (attach) { const a = attach; setAttach(null); await api(`/conversations/${id}/media`, { method: 'POST', body: { base64: a.base64, mime: a.mime, name: a.name, caption: body } }) }
+      else await api(`/conversations/${id}/messages`, { method: 'POST', body: { body } })
+      await load()
+    } catch (e) { toast(e.message, 'error') }
   }
+  const pickFile = (e) => {
+    const f = e.target.files?.[0]; e.target.value = ''
+    if (!f) return
+    if (f.size > 20 * 1024 * 1024) return toast('Máximo 20 MB', 'error')
+    const r = new FileReader()
+    r.onload = () => setAttach({ base64: String(r.result).split(',')[1], mime: f.type || 'application/octet-stream', name: f.name, preview: f.type.startsWith('image/') ? r.result : null })
+    r.readAsDataURL(f)
+  }
+  const simulateImage = async () => { try { await api(`/whatsapp/demo/media/${id}`, { method: 'POST' }) } catch (e) { toast(e.message, 'error') } }
+  const fill = (tpl) => tpl.replace(/{{\s*agente\s*}}/g, user.name.split(' ')[0]).replace(/{{\s*nombre\s*}}/g, (data?.contact?.name || '').split(' ')[0]).replace(/{{\s*empresa\s*}}/g, company?.name || '').replace(/{{\s*telefono\s*}}/g, data?.contact?.phone || '')
+  const insertEmoji = (e) => { setText((t) => t + e); setPop(null) }
   const patch = async (p) => { try { const c = await api(`/conversations/${id}`, { method: 'PATCH', body: p }); setData((d) => ({ ...d, conversation: c })); onChanged() } catch (e) { toast(e.message, 'error') } }
   const aiReply = async () => { setBusy(true); try { const r = await api(`/conversations/${id}/ai-reply`, { method: 'POST' }); if (r.skipped) toast('El agente no respondió (deshabilitado o límite de turnos)', 'warn'); await load() } catch (e) { toast(e.message, 'error') } finally { setBusy(false) } }
   const simulate = async () => { try { await api(`/whatsapp/demo/reply/${id}`, { method: 'POST' }) } catch (e) { toast(e.message, 'error') } }
@@ -105,7 +127,7 @@ function Chat({ id, meta, onChanged }) {
     if (e.key === '/' && text === '') setShowQuick(true)
     if (e.key === 'Escape') setShowQuick(false)
   }
-  const applyQuick = (qr) => { setText(qr.body.replace('{{agente}}', user.name.split(' ')[0]).replace('{{nombre}}', (data?.contact?.name || '').split(' ')[0])); setShowQuick(false) }
+  const applyQuick = (qr) => { setText(fill(qr.body)); setShowQuick(false); setPop(null) }
 
   if (!data) return <div className="chat"><div className="empty" style={{ margin: 'auto' }}>Cargando…</div></div>
   const { conversation: c, contact, messages } = data
@@ -116,12 +138,14 @@ function Chat({ id, meta, onChanged }) {
     <>
       <div className="chat">
         <div className="chat-head">
+          <button className="btn btn-ghost btn-icon back-btn" onClick={onBack} aria-label="Volver"><Icon name="back" size={18} /></button>
           <div className="avatar">{initials(contact.name)}</div>
           <div><div className="title">{contact.name || contact.phone}</div><div className="sub">+{contact.phone} · {SOURCE_LABEL[contact.source] || contact.source}{contact.campaign ? ` · ${contact.campaign}` : ''} · {c.instance_name}</div></div>
           <div className="actions" style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
             <select className="select" style={{ width: 'auto' }} value={c.status} onChange={(e) => patch({ status: e.target.value })}>
               <option value="open">Abierta</option><option value="pending">Pendiente</option><option value="closed">Cerrada</option>
             </select>
+            <button className="btn btn-ghost btn-icon side-toggle" onClick={onTogglePanel} aria-label="Detalles"><Icon name="info" size={18} /></button>
           </div>
         </div>
         <div className="chat-msgs">
@@ -133,7 +157,8 @@ function Chat({ id, meta, onChanged }) {
                 {sep && <div className="day-sep">{day}</div>}
                 <div className={`msg ${m.direction} ${m.sender_type}`}>
                   {m.direction === 'out' && m.sender_type !== 'system' && <div className="who">{m.sender_type === 'bot' ? <><Icon name="bot" size={13} /> Agente IA</> : m.sender_name || 'Asesor'}</div>}
-                  {m.body}
+                  <MediaView m={m} onZoom={setLightbox} />
+                  {m.body && <div className={m.media_url ? 'caption' : ''}>{m.body}</div>}
                   <div className="t">{fmtTime(m.created_at)} {m.direction === 'out' && (m.status === 'failed' ? <span className="fail" title="No se pudo enviar: instancia desconectada"><Icon name="x" size={11} /> no enviado</span> : <Icon name="checks" size={13} />)}</div>
                 </div>
               </div>
@@ -143,26 +168,34 @@ function Chat({ id, meta, onChanged }) {
           <div ref={endRef} />
         </div>
         <div className="chat-compose">
+          {attach && <div className="attach-preview">{attach.preview ? <img src={attach.preview} alt="" /> : <Icon name="file" size={22} />}<div style={{ flex: 1 }}><b>{attach.name}</b><div className="muted">{attach.mime}</div></div><button className="btn btn-ghost btn-icon" onClick={() => setAttach(null)}><Icon name="x" size={14} /></button></div>}
           <div className="box" style={{ position: 'relative' }}>
             {showQuick && quickMatches.length > 0 && <div className="quick-menu">{quickMatches.map((q) => <div key={q.id} onClick={() => applyQuick(q)}><b>/{q.shortcut}</b>{q.body.slice(0, 80)}</div>)}</div>}
+            {pop === 'emoji' && <div className="popover"><div className="emoji-grid">{EMOJIS.map((e) => <button key={e} onClick={() => insertEmoji(e)}>{e}</button>)}</div></div>}
+            {pop === 'tpl' && <div className="popover">{meta.quick.length === 0 && <div className="empty small">Sin plantillas. Créalas en Configuración.</div>}{meta.quick.map((q) => <div key={q.id} className="tpl-item" onClick={() => applyQuick(q)}><b>/{q.shortcut}</b><span>{fill(q.body)}</span></div>)}</div>}
             <textarea className="textarea" placeholder="Escribe un mensaje… (Enter envía, / respuestas rápidas)" value={text}
               onChange={(e) => { setText(e.target.value); if (e.target.value.startsWith('/')) setShowQuick(true); else setShowQuick(false); api(`/conversations/${id}/typing`, { method: 'POST' }).catch(() => {}) }} onKeyDown={onKey} />
-            <button className="btn btn-wa" onClick={send} disabled={!text.trim()}>Enviar <Icon name="send" size={15} /></button>
+            <button className="btn btn-wa" onClick={send} disabled={!text.trim() && !attach}>Enviar <Icon name="send" size={15} /></button>
           </div>
           <div className="tools">
-            <button className="btn btn-sm" onClick={() => setShowQuick((s) => !s)}><Icon name="zap" size={14} /> Rápidas</button>
+            <input ref={fileRef} type="file" hidden onChange={pickFile} accept="image/*,audio/*,video/mp4,application/pdf,.doc,.docx,.xls,.xlsx,.txt" />
+            <button className="btn btn-sm" onClick={() => fileRef.current?.click()} title="Adjuntar imagen, audio o documento"><Icon name="paperclip" size={14} /> Adjuntar</button>
+            <button className="btn btn-sm" onClick={() => setPop(pop === 'emoji' ? null : 'emoji')}><Icon name="smile" size={14} /></button>
+            <button className="btn btn-sm" onClick={() => setPop(pop === 'tpl' ? null : 'tpl')}><Icon name="template" size={14} /> Plantillas</button>
             <button className="btn btn-sm" onClick={aiReply} disabled={busy}><Icon name="sparkles" size={14} /> {busy ? 'Pensando…' : 'Que responda la IA'}</button>
             <label className="row small" style={{ gap: 6 }}><button className={`toggle ${c.ai_enabled ? 'on' : ''}`} onClick={() => patch({ ai_enabled: !c.ai_enabled })} /> IA automática en este chat</label>
-            {c.instance_name?.startsWith('WhatsApp') && <button className="btn btn-sm btn-ghost muted" onClick={simulate} title="Solo demo: simula que el cliente escribe"><Icon name="flask" size={14} /> Simular respuesta del cliente</button>}
+            {c.instance_name?.startsWith('WhatsApp') && <button className="btn btn-sm btn-ghost muted" onClick={simulate} title="Solo demo: simula que el cliente escribe"><Icon name="flask" size={14} /> Simular respuesta</button>}
+            {c.instance_name?.startsWith('WhatsApp') && <button className="btn btn-sm btn-ghost muted" onClick={simulateImage} title="Solo demo: el cliente envía una imagen"><Icon name="image" size={14} /> Simular imagen</button>}
           </div>
         </div>
       </div>
-      <SidePanel data={data} meta={meta} patch={patch} reload={load} />
+      {lightbox && <div className="lightbox" onClick={() => setLightbox(null)}><img src={lightbox} alt="" /></div>}
+      <SidePanel data={data} meta={meta} patch={patch} reload={load} onClose={onTogglePanel} />
     </>
   )
 }
 
-function SidePanel({ data, meta, patch, reload }) {
+function SidePanel({ data, meta, patch, reload, onClose }) {
   const { toast } = useStore()
   const { conversation: c, contact, notes, tasks, activity } = data
   const [note, setNote] = useState('')
@@ -185,6 +218,7 @@ function SidePanel({ data, meta, patch, reload }) {
 
   return (
     <aside className="side">
+      <button className="btn btn-ghost btn-sm side-toggle" style={{ alignSelf: 'flex-start', margin: '10px 10px 0' }} onClick={onClose}><Icon name="back" size={16} /> Volver al chat</button>
       <div className="contact-top">
         <div className="avatar">{initials(contact.name)}</div>
         <input className="input" style={{ textAlign: 'center', fontWeight: 600 }} defaultValue={contact.name || ''} onBlur={(e) => e.target.value !== contact.name && saveContact({ name: e.target.value })} />
@@ -238,4 +272,16 @@ function SidePanel({ data, meta, patch, reload }) {
       </div>
     </aside>
   )
+}
+
+const EMOJIS = ['😀', '😊', '😁', '😉', '🙂', '😍', '🤝', '👍', '👏', '🙏', '💪', '✅', '❌', '⭐', '🎉', '🔥', '💼', '📄', '📎', '📞', '📅', '⏰', '💰', '🏠', '🚗', '✈️', '❤️', '😢', '😅', '🤔', '👋', '🙌']
+
+function MediaView({ m, onZoom }) {
+  if (!m.media_url) return null
+  const src = `${m.media_url}?t=${getToken()}`
+  if (m.type === 'image') return <img className="media" src={src} alt={m.media_name || ''} onClick={() => onZoom(src)} loading="lazy" />
+  if (m.type === 'audio') return <audio controls src={src} preload="none" />
+  if (m.type === 'video') return <video controls src={src} preload="metadata" />
+  const kb = m.media_size ? `${Math.round(m.media_size / 1024)} KB` : ''
+  return <a className="doc" href={src} target="_blank" rel="noreferrer" download={m.media_name || true}><Icon name="file" size={20} /><div><b>{m.media_name || 'Documento'}</b><br /><small>{m.media_mime} {kb}</small></div></a>
 }

@@ -1,6 +1,7 @@
 import { db, now } from '../db/knex.js'
 import { emitCompany } from './realtime.js'
 import { providerFor } from './whatsapp/index.js'
+import { saveMedia, readMediaBase64 } from './media.js'
 
 export async function logActivity(companyId, conversationId, type, data = {}, userId = null) {
   await db('activity_log').insert({ company_id: companyId, conversation_id: conversationId, user_id: userId, type, data: JSON.stringify(data) })
@@ -32,7 +33,7 @@ export async function broadcastConversation(id) {
 /**
  * Envía un mensaje saliente (por asesor, bot o sistema) por la instancia de la conversación.
  */
-export async function sendOutbound(conversationId, { body, senderType = 'user', userId = null, type = 'text' }) {
+export async function sendOutbound(conversationId, { body, senderType = 'user', userId = null, type = 'text', media = null }) {
   const conv = await db('conversations').where({ id: conversationId }).first()
   if (!conv) throw new Error('Conversación no existe')
   const contact = await db('contacts').where({ id: conv.contact_id }).first()
@@ -40,9 +41,13 @@ export async function sendOutbound(conversationId, { body, senderType = 'user', 
 
   let waId = null
   let status = 'sent'
+  let saved = null
+  if (media) { saved = saveMedia({ base64: media.base64, mime: media.mime, name: media.name }); type = saved.type }
   if (inst && inst.status === 'connected') {
     try {
-      const r = await providerFor(inst).sendText(inst, contact.phone, body)
+      const r = saved
+        ? await providerFor(inst).sendMedia(inst, contact.phone, { base64: readMediaBase64(saved.url), mime: saved.mime, name: saved.name, type: saved.type, caption: body || '' })
+        : await providerFor(inst).sendText(inst, contact.phone, body)
       waId = r?.id || null
     } catch (e) {
       console.error('Error enviando por WhatsApp:', e.message)
@@ -55,7 +60,8 @@ export async function sendOutbound(conversationId, { body, senderType = 'user', 
   const ts = now()
   const [row] = await db('messages').insert({
     conversation_id: conversationId, direction: 'out', sender_type: senderType, sender_user_id: userId,
-    type, body, wa_message_id: waId, status, created_at: ts,
+    type, body: body || '', wa_message_id: waId, status, created_at: ts,
+    media_url: saved?.url || null, media_name: saved?.name || null, media_mime: saved?.mime || null, media_size: saved?.size || null,
   }).returning('id')
   const msgId = row.id ?? row
   const patch = { last_message_at: ts, last_outbound_at: ts, unread_count: 0 }

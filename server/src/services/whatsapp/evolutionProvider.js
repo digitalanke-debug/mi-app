@@ -65,6 +65,26 @@ export const evolutionProvider = {
     return data?.instance?.state === 'open' ? 'connected' : 'disconnected'
   },
 
+  /** Envía imagen, documento, video o audio. media = { base64, mime, name, type, caption } */
+  async sendMedia(inst, phone, media) {
+    const number = phone.replace(/\D/g, '')
+    if (media.type === 'audio') {
+      const data = await api(`/message/sendWhatsAppAudio/${inst.instance_key}`, { method: 'POST', body: { number, audio: media.base64 } })
+      return { id: data?.key?.id || null }
+    }
+    const data = await api(`/message/sendMedia/${inst.instance_key}`, {
+      method: 'POST',
+      body: { number, mediatype: media.type === 'image' ? 'image' : media.type === 'video' ? 'video' : 'document', mimetype: media.mime, caption: media.caption || '', media: media.base64, fileName: media.name },
+    })
+    return { id: data?.key?.id || null }
+  },
+
+  /** Descarga el contenido de un mensaje multimedia (base64) */
+  async fetchMediaBase64(inst, waMessageId) {
+    const data = await api(`/chat/getBase64FromMediaMessage/${inst.instance_key}`, { method: 'POST', body: { message: { key: { id: waMessageId } }, convertToMp4: false } })
+    return data?.base64 ? { base64: data.base64, mime: data.mimetype || data.mimeType || '' } : null
+  },
+
   async sendText(inst, phone, body) {
     const data = await api(`/message/sendText/${inst.instance_key}`, {
       method: 'POST',
@@ -94,16 +114,18 @@ export const evolutionProvider = {
       return items.filter((m) => m?.key && !m.key.fromMe && !m.key.remoteJid?.endsWith('@g.us')).map((m) => {
         const msg = m.message || {}
         const body = msg.conversation || msg.extendedTextMessage?.text || msg.imageMessage?.caption || msg.documentMessage?.caption || ''
-        const type = msg.imageMessage ? 'image' : msg.audioMessage ? 'audio' : msg.documentMessage ? 'document' : 'text'
+        const mediaMsg = msg.imageMessage || msg.audioMessage || msg.documentMessage || msg.videoMessage || msg.stickerMessage || null
+        const type = msg.imageMessage ? 'image' : msg.audioMessage ? 'audio' : msg.documentMessage ? 'document' : msg.videoMessage ? 'video' : msg.stickerMessage ? 'image' : 'text'
         // Anuncios "clic a WhatsApp" de Meta llegan con contextInfo.externalAdReply
         const ad = msg.extendedTextMessage?.contextInfo?.externalAdReply
         return {
           phone: m.key.remoteJid.split('@')[0],
           name: m.pushName || null,
-          body: body || (type !== 'text' ? `[${type}]` : ''),
+          body: body || '',
           type,
           waMessageId: m.key.id,
           adReferral: ad ? { source: 'meta_ads', campaign: ad.title || ad.sourceId || 'Meta CTWA' } : null,
+          media: mediaMsg ? { base64: m.message?.base64 || m.base64 || null, mime: mediaMsg.mimetype || '', name: mediaMsg.fileName || null } : null,
         }
       })
     }

@@ -9,6 +9,6 @@ packages:
   - curl
 runcmd:
   # Servidor web mínimo en el puerto 80 que publica los registros desde el primer minuto (http://<IP>/install.log)
-  - [ bash, -c, "mkdir -p /srv/status && touch /root/install.log && ln -sf /root/install.log /srv/status/install.log && ln -sf /var/log/cloud-init-output.log /srv/status/cloud-init.log && (nohup python3 -m http.server 80 --directory /srv/status >/dev/null 2>&1 &)" ]
+  - [ bash, -c, "mkdir -p /srv/status && touch /var/log/crm-install.log && ln -sf /var/log/crm-install.log /srv/status/install.log && ln -sf /var/log/cloud-init-output.log /srv/status/cloud-init.log && (nohup python3 -m http.server 80 --directory /srv/status >/dev/null 2>&1 &)" ]
   - [ bash, -c, "curl -fsSL https://raw.githubusercontent.com/digitalanke-debug/mi-app/claude/epic-tesla-80pp6u/deploy/install-hetzner.sh -o /root/install.sh" ]
-  - [ bash, -c, "bash -x /root/install.sh https://github.com/digitalanke-debug/mi-app.git auto claude/epic-tesla-80pp6u > /root/install.log 2>&1 || echo \"INSTALACION FALLO con codigo $?\" >> /root/install.log" ]
+  - [ bash, -c, "bash -x /root/install.sh https://github.com/digitalanke-debug/mi-app.git auto claude/epic-tesla-80pp6u > /var/log/crm-install.log 2>&1 || echo \"INSTALACION FALLO con codigo $?\" >> /var/log/crm-install.log" ]

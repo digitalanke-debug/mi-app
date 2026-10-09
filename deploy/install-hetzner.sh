@@ -40,7 +40,7 @@ mkdir -p /etc/caddy
 
 echo "==> Página de estado mientras se instala: https://$DOMAIN/install.log"
 mkdir -p "$STATUS_DIR"
-ln -sf /root/install.log "$STATUS_DIR/install.log"
+ln -sf /var/log/crm-install.log "$STATUS_DIR/install.log"
 echo "Instalando el CRM... recarga esta página en unos minutos. Registro: /install.log" > "$STATUS_DIR/index.html"
 cat > /etc/caddy/Caddyfile <<CADDY
 $DOMAIN {

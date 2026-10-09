@@ -5,7 +5,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends python3 make g+
 COPY package.json package-lock.json* ./
 COPY client/package.json client/
 COPY server/package.json server/
-RUN npm ci --workspaces --include-workspace-root --omit=optional
+RUN npm ci --workspaces --include-workspace-root
 COPY . .
 RUN npm run build -w client
 

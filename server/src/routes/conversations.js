@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { db, now } from '../db/knex.js'
-import { requireCompany } from '../auth.js'
+import { requireCompany, ownsRow } from '../auth.js'
 import { loadConversation, sendOutbound, broadcastConversation, logActivity } from '../services/conversations.js'
 import { aiRespond } from '../services/automations.js'
 import { emitCompany } from '../services/realtime.js'
@@ -29,10 +29,24 @@ conversationsRouter.get('/', requireCompany, async (req, res) => {
   if (stage) query = query.where('c.stage_id', Number(stage))
   if (tag) query = query.whereIn('c.id', db('conversation_tags').where('tag_id', Number(tag)).select('conversation_id'))
   if (q) query = query.whereIn('c.contact_id', db('contacts').where('company_id', req.companyId).where((b) => b.whereLike('name', `%${q}%`).orWhereLike('phone', `%${q}%`)).select('id'))
-  const rows = await query.orderBy('c.last_message_at', 'desc').limit(Number(limit)).select('c.id')
-  const out = []
-  for (const r of rows) out.push(await loadConversation(r.id))
-  res.json(out)
+  const rows = await query
+    .leftJoin('contacts as ct', 'ct.id', 'c.contact_id')
+    .leftJoin('users as u', 'u.id', 'c.assigned_user_id')
+    .leftJoin('pipeline_stages as s', 's.id', 'c.stage_id')
+    .leftJoin('whatsapp_instances as w', 'w.id', 'c.instance_id')
+    .orderBy('c.last_message_at', 'desc').limit(Number(limit))
+    .select('c.*', 'ct.name as contact_name', 'ct.phone as contact_phone', 'ct.source as contact_source', 'ct.campaign as contact_campaign', 'ct.city as contact_city',
+      'u.name as assigned_name', 's.name as stage_name', 's.color as stage_color', 'w.name as instance_name')
+  const ids = rows.map((r) => r.id)
+  const tags = ids.length ? await db('conversation_tags as ctg').join('tags as t', 't.id', 'ctg.tag_id').whereIn('ctg.conversation_id', ids).select('ctg.conversation_id', 't.id', 't.name', 't.color') : []
+  const lastIds = ids.length ? await db('messages').whereIn('conversation_id', ids).groupBy('conversation_id').select('conversation_id').max('id as id') : []
+  const lasts = lastIds.length ? await db('messages').whereIn('id', lastIds.map((l) => l.id)).select('conversation_id', 'body', 'direction', 'sender_type', 'created_at') : []
+  for (const r of rows) {
+    r.tags = tags.filter((t) => t.conversation_id === r.id).map(({ id, name, color }) => ({ id, name, color }))
+    const l = lasts.find((m) => m.conversation_id === r.id)
+    r.last_message = l ? { body: l.body, direction: l.direction, sender_type: l.sender_type, created_at: l.created_at } : null
+  }
+  res.json(rows)
 })
 
 conversationsRouter.get('/:id', canAccess, async (req, res) => {
@@ -98,8 +112,8 @@ conversationsRouter.post('/:id/tasks', canAccess, async (req, res) => {
   const [row] = await db('tasks').insert({ company_id: req.conv.company_id, conversation_id: req.conv.id, user_id: req.body.user_id || req.user.id, title: req.body.title, due_at: req.body.due_at || null }).returning('id')
   res.json(await db('tasks').where({ id: row.id ?? row }).first())
 })
-conversationsRouter.patch('/tasks/:taskId', async (req, res) => {
-  await db('tasks').where({ id: req.params.taskId }).update({ done: !!req.body.done })
+conversationsRouter.patch('/tasks/:id', ownsRow('tasks'), async (req, res) => {
+  await db('tasks').where({ id: req.params.id }).update({ done: !!req.body.done })
   res.json({ ok: true })
 })
 

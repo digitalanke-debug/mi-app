@@ -101,12 +101,39 @@ $DOMAIN {
         root * $STATUS_DIR
         file_server
     }
+    handle /autodeploy.log {
+        root * $STATUS_DIR
+        file_server
+    }
     handle {
         reverse_proxy localhost:4000
     }
 }
 CADDY
 systemctl reload caddy || systemctl restart caddy
+
+echo "==> Actualización automática: cada 5 minutos revisa GitHub y despliega si hay cambios"
+cat > /usr/local/bin/crm-autodeploy <<'AUTO'
+#!/bin/bash
+# Despliega automáticamente cuando hay commits nuevos en la rama configurada.
+cd /opt/crm || exit 1
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
+git fetch -q origin "$BRANCH" || exit 0
+LOCAL=$(git rev-parse HEAD); REMOTE=$(git rev-parse "origin/$BRANCH")
+[ "$LOCAL" = "$REMOTE" ] && exit 0
+echo "$(date -Is) desplegando $REMOTE" >> /var/log/crm-autodeploy.log
+git reset -q --hard "origin/$BRANCH"
+RAM_MB=$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo)
+if [ "$RAM_MB" -lt 6000 ]; then docker compose up -d --build postgres redis evolution server >> /var/log/crm-autodeploy.log 2>&1
+else docker compose up -d --build >> /var/log/crm-autodeploy.log 2>&1; fi
+sleep 10
+docker compose exec -T server node server/src/db/migrate.js >> /var/log/crm-autodeploy.log 2>&1
+docker image prune -f >/dev/null 2>&1
+echo "$(date -Is) listo" >> /var/log/crm-autodeploy.log
+AUTO
+chmod +x /usr/local/bin/crm-autodeploy
+echo "*/5 * * * * root flock -n /tmp/crm-autodeploy.lock /usr/local/bin/crm-autodeploy" > /etc/cron.d/crm-autodeploy
+touch /var/log/crm-autodeploy.log && ln -sf /var/log/crm-autodeploy.log "$STATUS_DIR/autodeploy.log"
 
 echo "==> Respaldo diario de la base de datos a /opt/crm/backups"
 mkdir -p backups

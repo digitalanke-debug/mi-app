@@ -42,3 +42,26 @@ export async function userCompanyIds(user) {
   if (user.role === 'admin') return (await db('companies').select('id')).map((c) => c.id)
   return (await db('company_users').where({ user_id: user.id }).select('company_id')).map((c) => c.company_id)
 }
+
+/** true si el usuario puede operar sobre la empresa */
+export async function canAccessCompany(user, companyId) {
+  if (!companyId) return false
+  if (user.role === 'admin') return true
+  return !!(await db('company_users').where({ company_id: companyId, user_id: user.id }).first())
+}
+
+/**
+ * Middleware: verifica que la fila :id de `table` pertenezca a una empresa del usuario.
+ * `companyOf` resuelve el company_id de la fila (por defecto la columna company_id).
+ */
+export function ownsRow(table, companyOf = (row) => row.company_id) {
+  return async (req, res, next) => {
+    const row = await db(table).where({ id: req.params.id }).first()
+    if (!row) return res.status(404).json({ error: 'No existe' })
+    const companyId = await companyOf(row)
+    if (!(await canAccessCompany(req.user, companyId))) return res.status(403).json({ error: 'Sin acceso' })
+    req.row = row
+    req.companyId = companyId
+    next()
+  }
+}

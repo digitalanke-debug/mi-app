@@ -1,6 +1,9 @@
 import { Router } from 'express'
 import { db } from '../db/knex.js'
-import { requireCompany, requireAdmin } from '../auth.js'
+import { requireCompany, requireAdmin, ownsRow } from '../auth.js'
+import { db as knex } from '../db/knex.js'
+
+const stageCompany = async (row) => (await knex('pipelines').where({ id: row.pipeline_id }).first())?.company_id
 import { aiAvailable } from '../services/ai.js'
 
 export const settingsRouter = Router()
@@ -14,12 +17,12 @@ settingsRouter.get('/contacts', requireCompany, async (req, res) => {
   const convs = await db('conversations').where({ company_id: req.companyId }).select('contact_id', 'id', 'status', 'stage_id')
   res.json(contacts.map((c) => ({ ...c, conversations: convs.filter((v) => v.contact_id === c.id) })))
 })
-settingsRouter.patch('/contacts/:id', async (req, res) => {
+settingsRouter.patch('/contacts/:id', ownsRow('contacts'), async (req, res) => {
   const { name, email, document, city, source, campaign, notes } = req.body
   await db('contacts').where({ id: req.params.id }).update({ name, email, document, city, source, campaign, notes })
   res.json(await db('contacts').where({ id: req.params.id }).first())
 })
-settingsRouter.delete('/contacts/:id', requireAdmin, async (req, res) => {
+settingsRouter.delete('/contacts/:id', requireAdmin, ownsRow('contacts'), async (req, res) => {
   // Derecho de supresión (habeas data): elimina contacto, conversaciones y mensajes
   await db('contacts').where({ id: req.params.id }).del()
   res.json({ ok: true })
@@ -31,7 +34,7 @@ settingsRouter.post('/tags', requireCompany, async (req, res) => {
   const [row] = await db('tags').insert({ company_id: req.companyId, name: req.body.name, color: req.body.color || '#64748b' }).returning('id')
   res.json(await db('tags').where({ id: row.id ?? row }).first())
 })
-settingsRouter.delete('/tags/:id', async (req, res) => { await db('tags').where({ id: req.params.id }).del(); res.json({ ok: true }) })
+settingsRouter.delete('/tags/:id', ownsRow('tags'), async (req, res) => { await db('tags').where({ id: req.params.id }).del(); res.json({ ok: true }) })
 
 // Pipelines y etapas
 settingsRouter.get('/pipelines', requireCompany, async (req, res) => {
@@ -39,17 +42,17 @@ settingsRouter.get('/pipelines', requireCompany, async (req, res) => {
   const stages = await db('pipeline_stages').whereIn('pipeline_id', pipelines.map((p) => p.id)).orderBy('position')
   res.json(pipelines.map((p) => ({ ...p, stages: stages.filter((s) => s.pipeline_id === p.id) })))
 })
-settingsRouter.post('/pipelines/:pipelineId/stages', async (req, res) => {
+settingsRouter.post('/pipelines/:pipelineId/stages', async (req, res, next) => { req.params.id = req.params.pipelineId; ownsRow('pipelines')(req, res, next) }, async (req, res) => {
   const max = await db('pipeline_stages').where({ pipeline_id: req.params.pipelineId }).max('position as m').first()
   const [row] = await db('pipeline_stages').insert({ pipeline_id: req.params.pipelineId, name: req.body.name, color: req.body.color || '#94a3b8', position: (max?.m ?? -1) + 1 }).returning('id')
   res.json(await db('pipeline_stages').where({ id: row.id ?? row }).first())
 })
-settingsRouter.patch('/stages/:id', async (req, res) => {
+settingsRouter.patch('/stages/:id', ownsRow('pipeline_stages', stageCompany), async (req, res) => {
   const { name, color, position, is_won, is_lost } = req.body
   await db('pipeline_stages').where({ id: req.params.id }).update({ name, color, position, is_won, is_lost })
   res.json(await db('pipeline_stages').where({ id: req.params.id }).first())
 })
-settingsRouter.delete('/stages/:id', async (req, res) => { await db('pipeline_stages').where({ id: req.params.id }).del(); res.json({ ok: true }) })
+settingsRouter.delete('/stages/:id', ownsRow('pipeline_stages', stageCompany), async (req, res) => { await db('pipeline_stages').where({ id: req.params.id }).del(); res.json({ ok: true }) })
 
 // Respuestas rápidas
 settingsRouter.get('/quick-replies', requireCompany, async (req, res) => res.json(await db('quick_replies').where({ company_id: req.companyId }).orderBy('shortcut')))
@@ -57,7 +60,7 @@ settingsRouter.post('/quick-replies', requireCompany, async (req, res) => {
   const [row] = await db('quick_replies').insert({ company_id: req.companyId, shortcut: req.body.shortcut, body: req.body.body }).returning('id')
   res.json(await db('quick_replies').where({ id: row.id ?? row }).first())
 })
-settingsRouter.delete('/quick-replies/:id', async (req, res) => { await db('quick_replies').where({ id: req.params.id }).del(); res.json({ ok: true }) })
+settingsRouter.delete('/quick-replies/:id', ownsRow('quick_replies'), async (req, res) => { await db('quick_replies').where({ id: req.params.id }).del(); res.json({ ok: true }) })
 
 // Automatizaciones
 settingsRouter.get('/automations', requireCompany, async (req, res) => {
@@ -69,7 +72,7 @@ settingsRouter.post('/automations', requireCompany, async (req, res) => {
   const [row] = await db('automations').insert({ company_id: req.companyId, name, trigger, conditions: JSON.stringify(conditions), actions: JSON.stringify(actions), enabled }).returning('id')
   res.json(await db('automations').where({ id: row.id ?? row }).first())
 })
-settingsRouter.patch('/automations/:id', async (req, res) => {
+settingsRouter.patch('/automations/:id', ownsRow('automations'), async (req, res) => {
   const { name, trigger, conditions, actions, enabled } = req.body
   const patch = {}
   if (name !== undefined) patch.name = name
@@ -80,7 +83,7 @@ settingsRouter.patch('/automations/:id', async (req, res) => {
   await db('automations').where({ id: req.params.id }).update(patch)
   res.json(await db('automations').where({ id: req.params.id }).first())
 })
-settingsRouter.delete('/automations/:id', async (req, res) => { await db('automations').where({ id: req.params.id }).del(); res.json({ ok: true }) })
+settingsRouter.delete('/automations/:id', ownsRow('automations'), async (req, res) => { await db('automations').where({ id: req.params.id }).del(); res.json({ ok: true }) })
 
 // Agente IA
 settingsRouter.get('/ai', requireCompany, async (req, res) => {

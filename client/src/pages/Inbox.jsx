@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useRealtime, useStore } from '../store.jsx'
 import { api, ago, fmtDate, fmtDateTime, fmtTime, initials, SOURCE_LABEL } from '../api.js'
+import { Icon } from '../components/Icons.jsx'
 
 const FILTERS = [['open', 'Abiertas'], ['mine', 'Mías'], ['unassigned', 'Sin asignar'], ['pending', 'Pendientes'], ['closed', 'Cerradas'], ['all', 'Todas']]
 
@@ -47,7 +48,7 @@ export default function Inbox() {
     <div className="inbox">
       <div className="inbox-list">
         <div className="head">
-          <input className="input" placeholder="Buscar por nombre o teléfono…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <div className="search"><Icon name="search" size={15} /><input className="input" placeholder="Buscar por nombre o teléfono" value={q} onChange={(e) => setQ(e.target.value)} /></div>
           <div className="filters">{FILTERS.map(([k, l]) => <button key={k} className={filter === k ? 'active' : ''} onClick={() => setFilter(k)}>{l}</button>)}</div>
         </div>
         <div className="items">
@@ -57,7 +58,7 @@ export default function Inbox() {
               <div className="avatar">{initials(c.contact_name)}</div>
               <div className="body">
                 <div className="top"><span className="name">{c.contact_name || c.contact_phone}</span><span className="time">{ago(c.last_message_at)}</span></div>
-                <div className="preview">{c.last_message ? `${c.last_message.direction === 'out' ? (c.last_message.sender_type === 'bot' ? '🤖 ' : '↩ ') : ''}${c.last_message.body}` : '—'}</div>
+                <div className="preview">{c.last_message?.direction === 'out' && <Icon name={c.last_message.sender_type === 'bot' ? 'bot' : 'checks'} size={13} className="muted" />}<span>{c.last_message ? c.last_message.body : '—'}</span></div>
                 <div className="meta">
                   {c.stage_name && <span className="chip"><span className="dot" style={{ background: c.stage_color }} />{c.stage_name}</span>}
                   {c.tags.slice(0, 2).map((t) => <span key={t.id} className="chip tag" style={{ background: t.color }}>{t.name}</span>)}
@@ -131,9 +132,9 @@ function Chat({ id, meta, onChanged }) {
               <div key={m.id} style={{ display: 'contents' }}>
                 {sep && <div className="day-sep">{day}</div>}
                 <div className={`msg ${m.direction} ${m.sender_type}`}>
-                  {m.direction === 'out' && m.sender_type !== 'system' && <div className="who">{m.sender_type === 'bot' ? '🤖 Agente IA' : m.sender_name || 'Asesor'}</div>}
+                  {m.direction === 'out' && m.sender_type !== 'system' && <div className="who">{m.sender_type === 'bot' ? <><Icon name="bot" size={13} /> Agente IA</> : m.sender_name || 'Asesor'}</div>}
                   {m.body}
-                  <div className="t">{fmtTime(m.created_at)} {m.direction === 'out' && (m.status === 'failed' ? <span className="fail" title="No se pudo enviar: instancia desconectada">✗ no enviado</span> : '✓✓')}</div>
+                  <div className="t">{fmtTime(m.created_at)} {m.direction === 'out' && (m.status === 'failed' ? <span className="fail" title="No se pudo enviar: instancia desconectada"><Icon name="x" size={11} /> no enviado</span> : <Icon name="checks" size={13} />)}</div>
                 </div>
               </div>
             )
@@ -146,13 +147,13 @@ function Chat({ id, meta, onChanged }) {
             {showQuick && quickMatches.length > 0 && <div className="quick-menu">{quickMatches.map((q) => <div key={q.id} onClick={() => applyQuick(q)}><b>/{q.shortcut}</b>{q.body.slice(0, 80)}</div>)}</div>}
             <textarea className="textarea" placeholder="Escribe un mensaje… (Enter envía, / respuestas rápidas)" value={text}
               onChange={(e) => { setText(e.target.value); if (e.target.value.startsWith('/')) setShowQuick(true); else setShowQuick(false); api(`/conversations/${id}/typing`, { method: 'POST' }).catch(() => {}) }} onKeyDown={onKey} />
-            <button className="btn btn-wa" onClick={send} disabled={!text.trim()}>Enviar ➤</button>
+            <button className="btn btn-wa" onClick={send} disabled={!text.trim()}>Enviar <Icon name="send" size={15} /></button>
           </div>
           <div className="tools">
-            <button className="btn btn-sm" onClick={() => setShowQuick((s) => !s)}>⚡ Rápidas</button>
-            <button className="btn btn-sm" onClick={aiReply} disabled={busy}>🤖 {busy ? 'Pensando…' : 'Que responda la IA'}</button>
+            <button className="btn btn-sm" onClick={() => setShowQuick((s) => !s)}><Icon name="zap" size={14} /> Rápidas</button>
+            <button className="btn btn-sm" onClick={aiReply} disabled={busy}><Icon name="sparkles" size={14} /> {busy ? 'Pensando…' : 'Que responda la IA'}</button>
             <label className="row small" style={{ gap: 6 }}><button className={`toggle ${c.ai_enabled ? 'on' : ''}`} onClick={() => patch({ ai_enabled: !c.ai_enabled })} /> IA automática en este chat</label>
-            {c.instance_name?.startsWith('WhatsApp') && <button className="btn btn-sm btn-ghost muted" onClick={simulate} title="Solo demo: simula que el cliente escribe">🧪 Simular respuesta del cliente</button>}
+            {c.instance_name?.startsWith('WhatsApp') && <button className="btn btn-sm btn-ghost muted" onClick={simulate} title="Solo demo: simula que el cliente escribe"><Icon name="flask" size={14} /> Simular respuesta del cliente</button>}
           </div>
         </div>
       </div>
@@ -191,7 +192,7 @@ function SidePanel({ data, meta, patch, reload }) {
         <div className="row" style={{ justifyContent: 'center' }}><span className="chip">{SOURCE_LABEL[contact.source] || contact.source}</span>{contact.campaign && <span className="chip">{contact.campaign}</span>}</div>
       </div>
       <div className="sec">
-        <h3>Tiempos</h3>
+        <h3><Icon name="clock" size={13} /> Tiempos</h3>
         <div className="timers">
           <div className={`timer ${waitingMin > 60 ? 'bad' : ''}`}><div className="v">{dur(waitingMin)}</div><div className="k">Esperando respuesta</div></div>
           <div className="timer"><div className="v">{dur(openMin)}</div><div className="k">Abierta hace</div></div>
@@ -215,25 +216,25 @@ function SidePanel({ data, meta, patch, reload }) {
         </div>
       </div>
       <div className="sec">
-        <h3>Etiquetas</h3>
-        <div className="row">{c.tags.map((t) => <span key={t.id} className="chip tag" style={{ background: t.color }}>{t.name}<span className="x" onClick={() => rmTag(t.id)}>✕</span></span>)}</div>
+        <h3><Icon name="tag" size={13} /> Etiquetas</h3>
+        <div className="row">{c.tags.map((t) => <span key={t.id} className="chip tag" style={{ background: t.color }}>{t.name}<span className="x" onClick={() => rmTag(t.id)}><Icon name="x" size={11} strokeWidth={2.5} /></span></span>)}</div>
         <select className="select" value="" onChange={(e) => addTag(Number(e.target.value))}>
           <option value="">+ Agregar etiqueta</option>{meta.tags.filter((t) => !c.tags.find((x) => x.id === t.id)).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
       </div>
       <div className="sec">
-        <h3>Notas internas</h3>
+        <h3><Icon name="note" size={13} /> Notas internas</h3>
         {notes.map((n) => <div key={n.id} className="note">{n.body}<div className="by">{n.user_name || 'Sistema'} · {fmtDateTime(n.created_at)}</div></div>)}
-        <div className="row"><input className="input" placeholder="Nueva nota…" value={note} onChange={(e) => setNote(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addNote()} /><button className="btn btn-sm" onClick={addNote}>+</button></div>
+        <div className="row"><input className="input" placeholder="Nueva nota…" value={note} onChange={(e) => setNote(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addNote()} /><button className="btn btn-sm btn-icon" onClick={addNote}><Icon name="plus" size={15} /></button></div>
       </div>
       <div className="sec">
-        <h3>Tareas y recordatorios</h3>
+        <h3><Icon name="calendar" size={13} /> Tareas y recordatorios</h3>
         {tasks.map((t) => <div key={t.id} className={`task ${t.done ? 'done' : ''}`}><input type="checkbox" checked={!!t.done} onChange={() => toggleTask(t)} /><div>{t.title}<div className="small muted">{fmtDateTime(t.due_at)}</div></div></div>)}
-        <div className="row"><input className="input" placeholder="Nueva tarea (vence mañana)…" value={task} onChange={(e) => setTask(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addTask()} /><button className="btn btn-sm" onClick={addTask}>+</button></div>
+        <div className="row"><input className="input" placeholder="Nueva tarea (vence mañana)…" value={task} onChange={(e) => setTask(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addTask()} /><button className="btn btn-sm btn-icon" onClick={addTask}><Icon name="plus" size={15} /></button></div>
       </div>
       <div className="sec">
         <h3>Actividad</h3>
-        <div className="activity">{activity.slice(0, 12).map((a) => <div key={a.id}>• <b>{a.type}</b> {a.user_name ? `por ${a.user_name}` : ''} <span className="muted">{ago(a.created_at)}</span></div>)}</div>
+        <div className="activity">{activity.slice(0, 12).map((a) => <div key={a.id}><b>{a.type}</b> {a.user_name ? `por ${a.user_name}` : ''} <span className="muted">{ago(a.created_at)}</span></div>)}</div>
       </div>
     </aside>
   )

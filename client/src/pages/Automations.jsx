@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useStore } from '../store.jsx'
 import { api } from '../api.js'
 import { Modal } from '../components/Layout.jsx'
+import { Icon } from '../components/Icons.jsx'
 
 const TRIGGERS = {
   new_conversation: 'Llega un lead nuevo', message_in: 'Llega cualquier mensaje', keyword: 'El mensaje contiene palabras clave',
@@ -48,7 +49,7 @@ export default function Automations() {
     <div className="page">
       <div className="page-head">
         <div><h1>Automatizaciones y bots</h1><div className="sub">Reglas "cuando pasa X, haz Y". Se ejecutan en orden para cada mensaje que entra.</div></div>
-        <div className="actions"><button className="btn btn-primary" onClick={() => setEdit({ name: '', trigger: 'new_conversation', conditions: {}, actions: [{ type: 'reply', body: '' }], enabled: true })}>+ Nueva automatización</button></div>
+        <div className="actions"><button className="btn btn-primary" onClick={() => setEdit({ name: '', trigger: 'new_conversation', conditions: {}, actions: [{ type: 'reply', body: '' }], enabled: true })}><Icon name="plus" size={15} /> Nueva automatización</button></div>
       </div>
       <div className="card">
         {list.map((a) => (
@@ -57,14 +58,14 @@ export default function Automations() {
             <div className="info">
               <b>{a.name}</b> <span className="muted small">· ejecutada {a.runs} veces</span>
               <div className="flow">
-                <span className="chip">⚡ {TRIGGERS[a.trigger] || a.trigger}</span>
+                <span className="chip"><Icon name="zap" size={12} /> {TRIGGERS[a.trigger] || a.trigger}</span>
                 {describeCond(a) && <span className="chip">si {describeCond(a)}</span>}
-                <span className="arrow">→</span>
-                {a.actions.map((x, i) => <span key={i} className="chip" style={{ background: 'var(--primary-soft)', color: 'var(--primary-2)', borderColor: '#bfd6f5' }}>{describeAction(x)}</span>)}
+                <span className="arrow"><Icon name="arrow" size={14} /></span>
+                {a.actions.map((x, i) => <span key={i} className="chip action">{describeAction(x)}</span>)}
               </div>
             </div>
-            <button className="btn btn-sm" onClick={() => setEdit({ ...a })}>Editar</button>
-            <button className="btn btn-sm btn-danger" onClick={() => remove(a)}>Eliminar</button>
+            <button className="btn btn-sm" onClick={() => setEdit({ ...a })}><Icon name="edit" size={13} /> Editar</button>
+            <button className="btn btn-sm btn-danger btn-icon" title="Eliminar" onClick={() => remove(a)}><Icon name="trash" size={14} /></button>
           </div>
         ))}
         {list.length === 0 && <div className="empty">Sin automatizaciones</div>}
@@ -91,7 +92,7 @@ export default function Automations() {
                 {x.type === 'assign' && <select className="select" value={x.mode === 'round_robin' ? 'rr' : x.user_id || ''} onChange={(e) => setEdit({ ...edit, actions: edit.actions.map((y, j) => (j === i ? (e.target.value === 'rr' ? { type: 'assign', mode: 'round_robin' } : { type: 'assign', user_id: Number(e.target.value) }) : y)) })}><option value="rr">Round robin (el que tenga menos carga)</option>{meta.users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}</select>}
                 {x.type === 'ai_reply' && <div className="small text-2">Usa la configuración del Agente IA de esta empresa.</div>}
               </div>
-              <button className="btn btn-sm btn-ghost" onClick={() => setEdit({ ...edit, actions: edit.actions.filter((_, j) => j !== i) })}>✕</button>
+              <button className="btn btn-sm btn-ghost btn-icon" onClick={() => setEdit({ ...edit, actions: edit.actions.filter((_, j) => j !== i) })}><Icon name="x" size={14} /></button>
             </div>
           ))}
           <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => setEdit({ ...edit, actions: [...edit.actions, { type: 'add_tag' }] })}>+ Acción</button>

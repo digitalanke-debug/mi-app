@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useStore } from '../store.jsx'
+import { Icon } from '../components/Icons.jsx'
 
 export default function Login() {
   const { login } = useStore()
@@ -16,7 +17,7 @@ export default function Login() {
   return (
     <div className="login">
       <form className="card" onSubmit={submit}>
-        <div className="brand" style={{ color: 'var(--text)', padding: 0 }}><div className="logo">✆</div> CRM WhatsApp</div>
+        <div className="brand" style={{ color: 'var(--text)', padding: 0 }}><div className="logo"><Icon name="wa" size={17} strokeWidth={2} /></div> CRM WhatsApp</div>
         <p className="text-2">Bandeja multiempresa, pipeline, automatizaciones y agente IA.</p>
         <div className="field"><label>Correo</label><input className="input" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" /></div>
         <div className="field"><label>Contraseña</label><input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" /></div>

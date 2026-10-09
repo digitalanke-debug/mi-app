@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useRealtime, useStore } from '../store.jsx'
 import { api, fmtDateTime } from '../api.js'
 import { Modal } from '../components/Layout.jsx'
+import { Icon } from '../components/Icons.jsx'
 
 const STATUS = { connected: 'Conectado', qr: 'Esperando escaneo del QR', connecting: 'Conectando…', disconnected: 'Desconectado' }
 
@@ -25,27 +26,27 @@ export default function WhatsApp() {
   const toggleSim = async () => { const r = await api('/whatsapp/demo/simulator', { method: 'POST', body: { running: !sim, everyMs: 45000 } }); setSim(r.running) }
 
   const current = list.find((i) => i.id === qrFor)
-  useEffect(() => { if (current?.status === 'connected' && qrFor) { toast(`${current.name} conectado ✅`, 'success'); setTimeout(() => setQrFor(null), 1200) } }, [current?.status])
+  useEffect(() => { if (current?.status === 'connected' && qrFor) { toast(`${current.name} conectado`, 'success'); setTimeout(() => setQrFor(null), 1200) } }, [current?.status])
 
   return (
     <div className="page">
       <div className="page-head">
         <div><h1>WhatsApp Business · {company?.name}</h1><div className="sub">Cada número se conecta escaneando el QR desde la app WhatsApp Business del celular, igual que WhatsApp Web.</div></div>
-        <div className="actions">{user.role === 'admin' && <button className="btn btn-primary" onClick={() => setCreating(true)}>+ Conectar otro número</button>}</div>
+        <div className="actions">{user.role === 'admin' && <button className="btn btn-primary" onClick={() => setCreating(true)}><Icon name="plus" size={15} /> Conectar otro número</button>}</div>
       </div>
       <div className="alert info">Modo demo: el QR es de prueba y la conexión se simula en unos segundos. En producción se usa Evolution API y el QR es real. Los mensajes de prueba se generan con los botones de simulación.</div>
       {list.map((i) => (
         <div key={i.id} className="card inst">
-          <div className="ico">📱</div>
+          <div className="ico-box"><Icon name="phone" size={20} /></div>
           <div className="info">
             <b>{i.name}</b> <span className="muted small">{i.phone}</span>
             <div className="row small" style={{ marginTop: 4 }}><span className={`status-dot status-${i.status}`} /> {STATUS[i.status] || i.status}{i.connected_at && i.status === 'connected' ? ` desde ${fmtDateTime(i.connected_at)}` : ''} · proveedor: {i.provider}</div>
           </div>
           <div className="row">
             {i.status === 'connected' ? (<>
-              {i.provider === 'demo' && <button className="btn btn-sm" onClick={() => newLead(i)}>🧪 Simular lead nuevo</button>}
+              {i.provider === 'demo' && <button className="btn btn-sm" onClick={() => newLead(i)}><Icon name="flask" size={14} /> Simular lead nuevo</button>}
               <button className="btn btn-sm" onClick={() => disconnect(i)}>Desconectar</button>
-            </>) : <button className="btn btn-wa btn-sm" onClick={() => connect(i)}>Conectar con QR</button>}
+            </>) : <button className="btn btn-wa btn-sm" onClick={() => connect(i)}><Icon name="qr" size={14} /> Conectar con QR</button>}
             {user.role === 'admin' && <button className="btn btn-sm btn-danger" onClick={() => remove(i)}>Eliminar</button>}
           </div>
         </div>

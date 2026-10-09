@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useStore } from '../store.jsx'
 import { api } from '../api.js'
 import { Modal } from '../components/Layout.jsx'
+import { Icon } from '../components/Icons.jsx'
 
 export default function Team() {
   const { companies, toast } = useStore()
@@ -20,7 +21,7 @@ export default function Team() {
     <div className="page">
       <div className="page-head">
         <div><h1>Equipo</h1><div className="sub">Usuarios, roles y a qué empresas tiene acceso cada uno.</div></div>
-        <div className="actions"><button className="btn btn-primary" onClick={() => setEdit({ name: '', email: '', password: '', role: 'agent', company_ids: companies.map((c) => c.id), active: true })}>+ Nuevo usuario</button></div>
+        <div className="actions"><button className="btn btn-primary" onClick={() => setEdit({ name: '', email: '', password: '', role: 'agent', company_ids: companies.map((c) => c.id), active: true })}><Icon name="plus" size={15} /> Nuevo usuario</button></div>
       </div>
       <div className="card"><table className="table">
         <thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Empresas</th><th>Estado</th><th></th></tr></thead>

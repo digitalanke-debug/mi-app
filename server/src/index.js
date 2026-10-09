@@ -18,6 +18,9 @@ import { checkInactivity } from './services/automations.js'
 import { startDemoSimulator } from './services/demoSimulator.js'
 
 const app = express()
+app.set('trust proxy', 1) // detrás de Caddy/Nginx
+app.disable('x-powered-by')
+if (process.env.NODE_ENV === 'production' && config.jwtSecret === 'cambiar-en-produccion') console.warn('ADVERTENCIA: JWT_SECRET por defecto en producción')
 app.use(cors({ origin: config.clientOrigin, credentials: true }))
 app.use(express.json({ limit: '2mb' }))
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useStore } from '../store.jsx'
 import { api } from '../api.js'
 import { Modal } from '../components/Layout.jsx'
+import { Icon } from '../components/Icons.jsx'
 
 export default function Settings() {
   const { companyId, company, user, toast, refreshCompanies } = useStore()
@@ -31,7 +32,7 @@ export default function Settings() {
   return (
     <div className="page">
       <div className="page-head"><div><h1>Configuración · {company?.name}</h1><div className="sub">Datos de la empresa, etapas del pipeline, etiquetas y respuestas rápidas.</div></div>
-        <div className="actions">{user.role === 'admin' && <button className="btn" onClick={() => setNewCompany({ name: '', sector: '', color: '#2563eb', description: '' })}>+ Nueva empresa</button>}</div></div>
+        <div className="actions">{user.role === 'admin' && <button className="btn" onClick={() => setNewCompany({ name: '', sector: '', color: '#0f766e', description: '' })}><Icon name="plus" size={15} /> Nueva empresa</button>}</div></div>
       <div className="grid-2">
         <div className="card"><div className="card-head"><h2>Empresa</h2><div className="actions"><button className="btn btn-sm btn-primary" onClick={saveCompany}>Guardar</button></div></div>
           <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -49,18 +50,18 @@ export default function Settings() {
               <div key={s.id} className="row"><input type="color" value={s.color} onChange={async (e) => { await api(`/stages/${s.id}`, { method: 'PATCH', body: { color: e.target.value } }); load() }} />
                 <input className="input" style={{ flex: 1 }} defaultValue={s.name} onBlur={async (e) => { if (e.target.value !== s.name) { await api(`/stages/${s.id}`, { method: 'PATCH', body: { name: e.target.value } }); load() } }} />
                 {s.is_won && <span className="chip" style={{ color: 'var(--success)' }}>Ganado</span>}{s.is_lost && <span className="chip" style={{ color: 'var(--danger)' }}>Perdido</span>}
-                <button className="btn btn-sm btn-ghost" onClick={async () => { if (confirm('¿Eliminar etapa?')) { await api(`/stages/${s.id}`, { method: 'DELETE' }); load() } }}>✕</button></div>))}
-            <div className="row"><input type="color" value={newStage.color} onChange={(e) => setNewStage({ ...newStage, color: e.target.value })} /><input className="input" style={{ flex: 1 }} placeholder="Nueva etapa" value={newStage.name} onChange={(e) => setNewStage({ ...newStage, name: e.target.value })} /><button className="btn btn-sm" onClick={addStage}>+</button></div>
+                <button className="btn btn-sm btn-ghost btn-icon" onClick={async () => { if (confirm('¿Eliminar etapa?')) { await api(`/stages/${s.id}`, { method: 'DELETE' }); load() } }}><Icon name="x" size={14} /></button></div>))}
+            <div className="row"><input type="color" value={newStage.color} onChange={(e) => setNewStage({ ...newStage, color: e.target.value })} /><input className="input" style={{ flex: 1 }} placeholder="Nueva etapa" value={newStage.name} onChange={(e) => setNewStage({ ...newStage, name: e.target.value })} /><button className="btn btn-sm btn-icon" onClick={addStage}><Icon name="plus" size={15} /></button></div>
           </div></div>
         <div className="card"><div className="card-head"><h2>Etiquetas</h2></div>
           <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div className="row">{tags.map((t) => <span key={t.id} className="chip tag" style={{ background: t.color }}>{t.name}<span className="x" onClick={async () => { await api(`/tags/${t.id}`, { method: 'DELETE' }); load() }}>✕</span></span>)}</div>
-            <div className="row"><input type="color" value={newTag.color} onChange={(e) => setNewTag({ ...newTag, color: e.target.value })} /><input className="input" style={{ flex: 1 }} placeholder="Nueva etiqueta" value={newTag.name} onChange={(e) => setNewTag({ ...newTag, name: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && addTag()} /><button className="btn btn-sm" onClick={addTag}>+</button></div>
+            <div className="row">{tags.map((t) => <span key={t.id} className="chip tag" style={{ background: t.color }}>{t.name}<span className="x" onClick={async () => { await api(`/tags/${t.id}`, { method: 'DELETE' }); load() }}><Icon name="x" size={11} strokeWidth={2.5} /></span></span>)}</div>
+            <div className="row"><input type="color" value={newTag.color} onChange={(e) => setNewTag({ ...newTag, color: e.target.value })} /><input className="input" style={{ flex: 1 }} placeholder="Nueva etiqueta" value={newTag.name} onChange={(e) => setNewTag({ ...newTag, name: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && addTag()} /><button className="btn btn-sm btn-icon" onClick={addTag}><Icon name="plus" size={15} /></button></div>
           </div></div>
         <div className="card"><div className="card-head"><h2>Respuestas rápidas</h2></div>
           <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {quick.map((q) => <div key={q.id} className="row"><span className="kbd">/{q.shortcut}</span><span style={{ flex: 1 }} className="small">{q.body}</span><button className="btn btn-sm btn-ghost" onClick={async () => { await api(`/quick-replies/${q.id}`, { method: 'DELETE' }); load() }}>✕</button></div>)}
-            <div className="row"><input className="input" style={{ width: 120 }} placeholder="atajo" value={newQuick.shortcut} onChange={(e) => setNewQuick({ ...newQuick, shortcut: e.target.value.replace(/\W/g, '').toLowerCase() })} /><input className="input" style={{ flex: 1 }} placeholder="Texto ({{agente}} y {{nombre}} se reemplazan)" value={newQuick.body} onChange={(e) => setNewQuick({ ...newQuick, body: e.target.value })} /><button className="btn btn-sm" onClick={addQuick}>+</button></div>
+            {quick.map((q) => <div key={q.id} className="row"><span className="kbd">/{q.shortcut}</span><span style={{ flex: 1 }} className="small">{q.body}</span><button className="btn btn-sm btn-ghost btn-icon" onClick={async () => { await api(`/quick-replies/${q.id}`, { method: 'DELETE' }); load() }}><Icon name="x" size={14} /></button></div>)}
+            <div className="row"><input className="input" style={{ width: 120 }} placeholder="atajo" value={newQuick.shortcut} onChange={(e) => setNewQuick({ ...newQuick, shortcut: e.target.value.replace(/\W/g, '').toLowerCase() })} /><input className="input" style={{ flex: 1 }} placeholder="Texto ({{agente}} y {{nombre}} se reemplazan)" value={newQuick.body} onChange={(e) => setNewQuick({ ...newQuick, body: e.target.value })} /><button className="btn btn-sm btn-icon" onClick={addQuick}><Icon name="plus" size={15} /></button></div>
           </div></div>
       </div>
       {newCompany && <Modal title="Nueva empresa" onClose={() => setNewCompany(null)} footer={<button className="btn btn-primary" onClick={createCompany}>Crear</button>}>

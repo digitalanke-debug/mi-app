@@ -42,6 +42,7 @@ $DOMAIN {
     file_server
 }
 CADDY
+pkill -f "http.server 80" || true   # libera el puerto 80 del servidor de estado provisional
 systemctl enable caddy >/dev/null 2>&1 || true
 systemctl restart caddy
 

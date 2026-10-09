@@ -9,4 +9,4 @@ packages:
   - curl
 runcmd:
   - [ bash, -c, "curl -fsSL https://raw.githubusercontent.com/digitalanke-debug/mi-app/claude/epic-tesla-80pp6u/deploy/install-hetzner.sh -o /root/install.sh" ]
-  - [ bash, -c, "bash /root/install.sh https://github.com/digitalanke-debug/mi-app.git auto claude/epic-tesla-80pp6u > /root/install.log 2>&1" ]
+  - [ bash, -c, "bash -x /root/install.sh https://github.com/digitalanke-debug/mi-app.git auto claude/epic-tesla-80pp6u > /root/install.log 2>&1 || echo \"INSTALACION FALLO con codigo $?\" >> /root/install.log" ]

@@ -2,6 +2,8 @@
 # Instalación en un servidor Hetzner Cloud (Ubuntu 24.04) recién creado.
 # Uso (como root):  bash install-hetzner.sh https://github.com/USUARIO/REPO.git crm.tudominio.com
 set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a
+STATUS_DIR=/var/www/status   # el registro de instalación se publica en https://<dominio>/install.log
 
 REPO="${1:?Falta la URL del repositorio git}"
 DOMAIN="${2:-auto}"
@@ -15,17 +17,12 @@ if [ "$DOMAIN" = "auto" ]; then
   echo "==> Sin dominio propio: el CRM quedará en https://$DOMAIN"
 fi
 
-echo "==> Actualizando sistema"
-apt-get update -y && apt-get upgrade -y
+echo "==> Instalando paquetes base (sin upgrade completo, para no bloquear la instalación)"
+apt-get update -y
 apt-get install -y git curl ufw fail2ban unattended-upgrades
 
 echo "==> Firewall: solo SSH, HTTP y HTTPS"
 ufw allow OpenSSH && ufw allow 80/tcp && ufw allow 443/tcp && ufw --force enable
-
-echo "==> Instalando Docker"
-if ! command -v docker >/dev/null; then
-  curl -fsSL https://get.docker.com | sh || apt-get install -y docker.io docker-compose-v2
-fi
 
 echo "==> Instalando Caddy (HTTPS automático)"
 if ! command -v caddy >/dev/null; then
@@ -33,6 +30,24 @@ if ! command -v caddy >/dev/null; then
   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list >/dev/null
   apt-get update -y && apt-get install -y caddy
+fi
+
+echo "==> Página de estado mientras se instala: https://$DOMAIN/install.log"
+mkdir -p "$STATUS_DIR"
+ln -sf /root/install.log "$STATUS_DIR/install.log"
+echo "Instalando el CRM... recarga esta página en unos minutos. Registro: /install.log" > "$STATUS_DIR/index.html"
+cat > /etc/caddy/Caddyfile <<CADDY
+$DOMAIN {
+    root * $STATUS_DIR
+    file_server
+}
+CADDY
+systemctl enable caddy >/dev/null 2>&1 || true
+systemctl restart caddy
+
+echo "==> Instalando Docker"
+if ! command -v docker >/dev/null; then
+  curl -fsSL https://get.docker.com | sh || apt-get install -y docker.io docker-compose-v2
 fi
 
 echo "==> Clonando el CRM en $APP_DIR"
@@ -58,15 +73,6 @@ ENV
   echo "    Revisa $APP_DIR/.env y agrega ANTHROPIC_API_KEY si vas a usar el agente IA."
 fi
 
-echo "==> Configurando Caddy para $DOMAIN"
-cat > /etc/caddy/Caddyfile <<CADDY
-$DOMAIN {
-    encode gzip
-    reverse_proxy localhost:4000
-}
-CADDY
-systemctl reload caddy || systemctl restart caddy
-
 echo "==> Levantando contenedores (esto tarda unos minutos la primera vez)"
 RAM_MB=$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo)
 if [ "$RAM_MB" -lt 6000 ]; then
@@ -79,6 +85,21 @@ sleep 15
 docker compose exec -T server node server/src/db/migrate.js
 if [ "${SEED:-yes}" = "yes" ]; then docker compose exec -T server node server/src/db/seed.js || true; fi
 echo "https://$DOMAIN" > /root/CRM_URL.txt
+
+echo "==> Configurando Caddy para $DOMAIN (CRM en /, registro en /install.log)"
+cat > /etc/caddy/Caddyfile <<CADDY
+$DOMAIN {
+    encode gzip
+    handle /install.log {
+        root * $STATUS_DIR
+        file_server
+    }
+    handle {
+        reverse_proxy localhost:4000
+    }
+}
+CADDY
+systemctl reload caddy || systemctl restart caddy
 
 echo "==> Respaldo diario de la base de datos a /opt/crm/backups"
 mkdir -p backups

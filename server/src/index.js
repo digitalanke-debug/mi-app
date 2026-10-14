@@ -21,6 +21,7 @@ import { broadcastTick } from './services/broadcasts.js'
 import { checkInactivity } from './services/automations.js'
 import { ensureWebhook, ensureSettings, syncEvolutionStatus, cleanOrphanInstances } from './services/whatsapp/evolutionProvider.js'
 import { resolveHiddenPhones } from './services/contactIdentity.js'
+import { syncWhatsappContacts } from './services/contactSync.js'
 import { startDemoSimulator } from './services/demoSimulator.js'
 
 const app = express()
@@ -89,6 +90,12 @@ if (config.whatsappProvider === 'evolution') {
   const lidSweep = () => resolveHiddenPhones().then((r) => r.found && console.log(`Números reales encontrados: ${r.found} de ${r.pending}`)).catch((e) => console.warn('números ocultos:', e.message))
   setTimeout(lidSweep, 60_000)
   setInterval(lidSweep, 10 * 60_000)
+  // Contactos guardados en el WhatsApp de cada número: se sincronizan cada 6 horas
+  setInterval(async () => {
+    for (const inst of await evoInstances().where({ status: 'connected' })) {
+      try { const r = await syncWhatsappContacts(inst); if (r.created || r.named) console.log(`Contactos de ${inst.name}: ${r.created} nuevos, ${r.named} con nombre`) } catch (e) { console.warn(`contactos ${inst.instance_key}:`, e.message) }
+    }
+  }, 6 * 3600_000)
 }
 if (config.whatsappProvider === 'demo' && config.demoAutoLeads) startDemoSimulator({ everyMs: 90_000 })
 

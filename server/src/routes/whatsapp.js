@@ -9,6 +9,7 @@ import { canAccessCompany } from '../auth.js'
 import { evolutionProvider, evolutionDiag } from '../services/whatsapp/evolutionProvider.js'
 import fs from 'node:fs'
 import { importEvolutionHistory } from '../services/historyImport.js'
+import { syncWhatsappContacts } from '../services/contactSync.js'
 import { handleInbound } from '../services/inbound.js'
 import { simulateNewLead, simulateReply, startDemoSimulator, stopDemoSimulator, simulatorRunning } from '../services/demoSimulator.js'
 
@@ -23,8 +24,30 @@ whatsappRouter.post('/instances/:id/import-history', requireAuth, async (req, re
   const inst = await db('whatsapp_instances').where({ id: req.params.id }).first()
   if (!inst || !(await canAccessCompany(req.user, inst.company_id))) return res.status(404).json({ error: 'No existe' })
   if (inst.provider !== 'evolution') return res.status(400).json({ error: 'La importación de historial aplica a números conectados por QR' })
-  try { res.json(await importEvolutionHistory(inst, { days: Number(req.body?.days) || 365 })) }
+  try {
+    const r = await importEvolutionHistory(inst, { days: Number(req.body?.days) || 365 })
+    // De paso trae los nombres guardados en el celular
+    try { r.contacts = await syncWhatsappContacts(inst) } catch (e) { console.warn('sincronizar contactos:', e.message) }
+    res.json(r)
+  }
   catch (e) { console.error('Importar historial:', e); res.status(500).json({ error: e.message }) }
+})
+
+/** Trae los contactos guardados en todos los WhatsApp por QR de la empresa */
+whatsappRouter.post('/sync-contacts', requireAuth, requireCompany, async (req, res) => {
+  const list = await db('whatsapp_instances').where({ company_id: req.companyId, provider: 'evolution', status: 'connected' })
+  if (!list.length) return res.status(400).json({ error: 'No hay números de WhatsApp conectados por QR en esta empresa' })
+  const out = { total: 0, created: 0, named: 0, numbers: list.length }
+  for (const inst of list) { const r = await syncWhatsappContacts(inst); out.total += r.total; out.created += r.created; out.named += r.named }
+  res.json(out)
+})
+
+/** Trae los contactos guardados en el WhatsApp del número (usuarios de la empresa) */
+whatsappRouter.post('/instances/:id/sync-contacts', requireAuth, async (req, res) => {
+  const inst = await db('whatsapp_instances').where({ id: req.params.id }).first()
+  if (!inst || !(await canAccessCompany(req.user, inst.company_id))) return res.status(404).json({ error: 'No existe' })
+  if (inst.provider !== 'evolution') return res.status(400).json({ error: 'La sincronización de contactos aplica a números conectados por QR' })
+  res.json(await syncWhatsappContacts(inst))
 })
 
 /** Diagnóstico de WhatsApp (solo admin): Evolution, instancias y registros recientes */

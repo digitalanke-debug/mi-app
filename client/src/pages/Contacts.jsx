@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store.jsx'
-import { api, fmtDate, SOURCE_LABEL, phoneLabel } from '../api.js'
+import { api, fmtDate, SOURCE_LABEL, phoneLabel, formatPhone } from '../api.js'
 import { Icon } from '../components/Icons.jsx'
 
 export default function Contacts() {
@@ -11,17 +11,26 @@ export default function Contacts() {
   const [q, setQ] = useState('')
   const load = () => companyId && api('/contacts', { params: { company_id: companyId, q } }).then(setList)
   useEffect(() => { load() }, [companyId, q])
+  const [syncing, setSyncing] = useState(false)
+  const syncWhatsapp = async () => {
+    setSyncing(true)
+    try {
+      const r = await api('/whatsapp/sync-contacts', { method: 'POST', body: { company_id: companyId } })
+      toast(r.total ? `Contactos de WhatsApp: ${r.created} nuevos, ${r.named} con nombre actualizado` : 'WhatsApp aún no ha enviado la agenda de este número. Intenta de nuevo en unos minutos.', r.total ? 'success' : 'warn')
+      load()
+    } catch (e) { toast(e.message, 'error') } finally { setSyncing(false) }
+  }
   const remove = async (c) => { if (!confirm(`¿Eliminar a ${c.name} y todas sus conversaciones? (derecho de supresión)`)) return; await api(`/contacts/${c.id}`, { method: 'DELETE' }); load(); toast('Contacto eliminado', 'success') }
   const exportCsv = () => {
-    const rows = [['Nombre', 'Teléfono', 'Correo', 'Ciudad', 'Origen', 'Campaña', 'Creado'], ...list.map((c) => [c.name, c.phone, c.email, c.city, SOURCE_LABEL[c.source] || c.source, c.campaign, c.created_at])]
+    const rows = [['Nombre', 'Teléfono', 'Correo', 'Ciudad', 'Origen', 'Campaña', 'Creado'], ...list.map((c) => [c.name, formatPhone(c.phone), c.email, c.city, SOURCE_LABEL[c.source] || c.source, c.campaign, c.created_at])]
     const blob = new Blob([rows.map((r) => r.map((v) => `"${(v ?? '').toString().replace(/"/g, '""')}"`).join(',')).join('\n')], { type: 'text/csv' })
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'contactos.csv'; a.click()
   }
   return (
     <div className="page">
       <div className="page-head">
-        <div><h1>Contactos</h1><div className="sub">{list.length} contactos de la empresa activa</div></div>
-        <div className="actions"><input className="input" style={{ width: 260 }} placeholder="Buscar…" value={q} onChange={(e) => setQ(e.target.value)} /><button className="btn" onClick={exportCsv}><Icon name="download" size={15} /> Exportar CSV</button></div>
+        <div><h1>Contactos</h1><div className="sub">{list.length >= 500 ? 'Mostrando los 500 más recientes · usa el buscador para encontrar los demás' : `${list.length} contactos de la empresa activa`}</div></div>
+        <div className="actions"><input className="input" style={{ width: 260 }} placeholder="Buscar nombre, teléfono, correo o cédula…" value={q} onChange={(e) => setQ(e.target.value)} /><button className="btn" disabled={syncing} onClick={syncWhatsapp}><Icon name="refresh" size={15} /> {syncing ? 'Sincronizando…' : 'Traer contactos de WhatsApp'}</button><button className="btn" onClick={exportCsv}><Icon name="download" size={15} /> Exportar CSV</button></div>
       </div>
       <div className="card">
         <table className="table">

@@ -44,7 +44,7 @@ export default function WhatsApp() {
     try {
       const r = await api(`/whatsapp/instances/${i.id}/import-history`, { method: 'POST', body: { days: 365 } })
       if (!r.scanned) toast('No hay historial guardado para este número. Desconéctalo y vuelve a escanear el QR para que WhatsApp lo envíe, espera 2 minutos e importa de nuevo.', 'warn')
-      else toast(`Historial importado: ${r.conversationsCreated} conversaciones nuevas, ${r.messagesImported} mensajes`, 'success')
+      else toast(`Historial importado: ${r.conversationsCreated} conversaciones nuevas, ${r.messagesImported} mensajes${r.contacts ? `, ${r.contacts.created} contactos de la agenda` : ''}`, 'success')
     } catch (e) { toast(e.message, 'error') } finally { setImporting(null) }
   }
   const connect = async (i) => {

@@ -75,6 +75,12 @@ export async function lookupPhoneForLid(inst, lid) {
   return null
 }
 
+/** Contactos que Evolution guardó del WhatsApp vinculado (agenda del celular y personas con las que se ha chateado) */
+export async function evolutionContacts(inst) {
+  const r = await api(`/chat/findContacts/${inst.instance_key}`, { method: 'POST', body: { where: {} } })
+  return Array.isArray(r) ? r : r?.contacts || r?.records || []
+}
+
 /** El webhook reemplaza el @lid por el teléfono; Evolution guarda el mensaje original, de ahí lo recuperamos */
 export async function lidForMessage(inst, waMessageId) {
   if (!waMessageId) return null

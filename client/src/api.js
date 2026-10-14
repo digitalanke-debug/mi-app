@@ -38,5 +38,11 @@ export const SOURCE_LABEL = { google_ads: 'Google Ads', meta_ads: 'Meta Ads', or
 /** Teléfono para mostrar. WhatsApp a veces oculta el número y entrega un identificador privado (@lid) */
 // WhatsApp a veces oculta el número y solo da un identificador @lid; mientras no sepamos el real, el "teléfono" guardado es ese identificador
 export const isHiddenPhone = (phone, jid) => !!jid && String(jid).endsWith('@lid') && String(jid).split('@')[0] === String(phone)
-export const phoneLabel = (phone, jid) => (isHiddenPhone(phone, jid) ? 'Número oculto por WhatsApp' : phone ? `+${phone}` : '')
+// +57 300 123 4567 (Colombia); otros países: +indicativo y número
+export const formatPhone = (phone) => {
+  const d = String(phone || '').replace(/\D/g, '')
+  if (/^57[1-9]\d{9}$/.test(d)) return `+57 ${d.slice(2, 5)} ${d.slice(5, 8)} ${d.slice(8)}`
+  return d ? `+${d}` : ''
+}
+export const phoneLabel = (phone, jid) => (isHiddenPhone(phone, jid) ? 'Número oculto por WhatsApp' : formatPhone(phone))
 export const initials = (name) => (name || '?').split(' ').slice(0, 2).map((w) => w[0]).join('').toUpperCase()

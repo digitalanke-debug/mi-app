@@ -5,6 +5,7 @@ import { db as knex } from '../db/knex.js'
 
 const stageCompany = async (row) => (await knex('pipelines').where({ id: row.pipeline_id }).first())?.company_id
 import { aiAvailable } from '../services/ai.js'
+import { matchContact } from '../services/search.js'
 import { setContactPhone, resolveHiddenPhone, hasHiddenPhone } from '../services/contactIdentity.js'
 
 export const settingsRouter = Router()
@@ -13,7 +14,7 @@ export const settingsRouter = Router()
 settingsRouter.get('/contacts', requireCompany, async (req, res) => {
   const { q } = req.query
   let query = db('contacts').where({ company_id: req.companyId })
-  if (q) query = query.where((b) => b.whereLike('name', `%${q}%`).orWhereLike('phone', `%${q}%`))
+  if (q) query = query.where((b) => matchContact(b, q))
   const contacts = await query.orderBy('created_at', 'desc').limit(500)
   const convs = await db('conversations').where({ company_id: req.companyId }).select('contact_id', 'id', 'status', 'stage_id')
   res.json(contacts.map((c) => ({ ...c, conversations: convs.filter((v) => v.contact_id === c.id) })))

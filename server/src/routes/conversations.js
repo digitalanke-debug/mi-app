@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { matchContact } from '../services/search.js'
 import { db, now } from '../db/knex.js'
 import { requireCompany, ownsRow } from '../auth.js'
 import { loadConversation, sendOutbound, broadcastConversation, logActivity, sendTemplateMessage, retryMessage } from '../services/conversations.js'
@@ -28,7 +29,7 @@ conversationsRouter.get('/', requireCompany, async (req, res) => {
   else if (assigned) query = query.where('c.assigned_user_id', Number(assigned))
   if (stage) query = query.where('c.stage_id', Number(stage))
   if (tag) query = query.whereIn('c.id', db('conversation_tags').where('tag_id', Number(tag)).select('conversation_id'))
-  if (q) query = query.whereIn('c.contact_id', db('contacts').where('company_id', req.companyId).where((b) => b.whereLike('name', `%${q}%`).orWhereLike('phone', `%${q}%`)).select('id'))
+  if (q) query = query.whereIn('c.contact_id', db('contacts').where('company_id', req.companyId).where((b) => matchContact(b, q)).select('id'))
   const rows = await query
     .leftJoin('contacts as ct', 'ct.id', 'c.contact_id')
     .leftJoin('users as u', 'u.id', 'c.assigned_user_id')

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store.jsx'
-import { api, fmtDate, SOURCE_LABEL } from '../api.js'
+import { api, fmtDate, SOURCE_LABEL, phoneLabel } from '../api.js'
 import { Icon } from '../components/Icons.jsx'
 
 export default function Contacts() {
@@ -28,7 +28,7 @@ export default function Contacts() {
           <thead><tr><th>Nombre</th><th>Teléfono</th><th>Ciudad</th><th>Origen</th><th>Campaña</th><th>Conversaciones</th><th>Creado</th><th></th></tr></thead>
           <tbody>{list.map((c) => (
             <tr key={c.id}>
-              <td><b>{c.name}</b></td><td>+{c.phone}</td><td>{c.city || '—'}</td><td><span className="chip">{SOURCE_LABEL[c.source] || c.source}</span></td><td>{c.campaign || '—'}</td>
+              <td><b>{c.name}</b></td><td>{phoneLabel(c.phone, c.wa_jid)}</td><td>{c.city || '—'}</td><td><span className="chip">{SOURCE_LABEL[c.source] || c.source}</span></td><td>{c.campaign || '—'}</td>
               <td>{c.conversations.map((v) => <button key={v.id} className="btn btn-sm btn-ghost" onClick={() => nav(`/bandeja/${v.id}`)}>#{v.id} {v.status === 'closed' ? '✓' : '💬'}</button>)}</td>
               <td className="muted">{fmtDate(c.created_at)}</td>
               <td>{user.role === 'admin' && <button className="btn btn-sm btn-danger btn-icon" title="Eliminar" onClick={() => remove(c)}><Icon name="trash" size={14} /></button>}</td>

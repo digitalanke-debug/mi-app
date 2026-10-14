@@ -14,7 +14,7 @@ export async function loadConversation(id) {
     .leftJoin('users as u', 'u.id', 'c.assigned_user_id')
     .leftJoin('pipeline_stages as s', 's.id', 'c.stage_id')
     .leftJoin('whatsapp_instances as w', 'w.id', 'c.instance_id')
-    .select('c.*', 'ct.name as contact_name', 'ct.phone as contact_phone', 'ct.source as contact_source', 'ct.campaign as contact_campaign', 'ct.city as contact_city',
+    .select('c.*', 'ct.name as contact_name', 'ct.phone as contact_phone', 'ct.wa_jid as contact_jid', 'ct.source as contact_source', 'ct.campaign as contact_campaign', 'ct.city as contact_city',
       'u.name as assigned_name', 's.name as stage_name', 's.color as stage_color', 'w.name as instance_name', 'w.provider as instance_provider')
     .where('c.id', id).first()
   if (!c) return null
@@ -44,11 +44,13 @@ export async function sendOutbound(conversationId, { body, senderType = 'user', 
   let errorMsg = null
   let saved = null
   if (media) { saved = saveMedia({ base64: media.base64, mime: media.mime, name: media.name }); type = saved.type }
+  // Por QR se responde al identificador exacto de WhatsApp (necesario para contactos @lid)
+  const target = inst?.provider === 'evolution' && contact.wa_jid ? contact.wa_jid : contact.phone
   if (inst && inst.status === 'connected') {
     try {
       const r = saved
-        ? await providerFor(inst).sendMedia(inst, contact.phone, { base64: readMediaBase64(saved.url), mime: saved.mime, name: saved.name, type: saved.type, caption: body || '' })
-        : await providerFor(inst).sendText(inst, contact.phone, body)
+        ? await providerFor(inst).sendMedia(inst, target, { base64: readMediaBase64(saved.url), mime: saved.mime, name: saved.name, type: saved.type, caption: body || '' })
+        : await providerFor(inst).sendText(inst, target, body)
       waId = r?.id || null
     } catch (e) {
       console.error('Error enviando por WhatsApp:', e.message)

@@ -26,13 +26,15 @@ export async function importEvolutionHistory(inst, { days = 365 } = {}) {
     scanned++
     const jid = m.key?.remoteJid || ''
     if (jid.endsWith('@g.us') || jid === 'status@broadcast' || jid.endsWith('@newsletter') || jid.endsWith('@broadcast')) continue
-    const phone = phoneFromKey(m.key)
-    if (!phone) { skippedNoPhone++; continue }
+    const realPhone = phoneFromKey(m.key)
+    const isLid = !realPhone && jid.endsWith('@lid')
+    if (!realPhone && !isLid) { skippedNoPhone++; continue }
+    const phone = realPhone || jid.split('@')[0]
     const created_at = tsOf(m.messageTimestamp)
     if (new Date(created_at).getTime() < since) { skippedOld++; continue }
     const d = describeEvolutionMessage(m)
     if (!d.body) continue
-    const entry = byPhone.get(phone) || { name: null, msgs: [] }
+    const entry = byPhone.get(phone) || { name: null, msgs: [], jid: realPhone ? `${realPhone}@s.whatsapp.net` : jid }
     if (!m.key.fromMe && m.pushName && !entry.name) entry.name = m.pushName
     entry.msgs.push({ id: m.key.id, fromMe: !!m.key.fromMe, body: d.body, type: d.type, created_at, ad: d.ad })
     byPhone.set(phone, entry)
@@ -40,7 +42,7 @@ export async function importEvolutionHistory(inst, { days = 365 } = {}) {
 
   let contactsCreated = 0, conversationsCreated = 0, messagesImported = 0
   const recentLimit = Date.now() - 7 * 86400_000
-  for (const [phone, { name, msgs }] of byPhone) {
+  for (const [phone, { name, msgs, jid }] of byPhone) {
     msgs.sort((a, b) => a.created_at.localeCompare(b.created_at))
     const first = msgs[0], last = msgs[msgs.length - 1]
     let contact = await db('contacts').where({ company_id: company.id, phone }).first()
@@ -48,11 +50,14 @@ export async function importEvolutionHistory(inst, { days = 365 } = {}) {
       const ad = msgs.find((x) => x.ad)?.ad
       const firstIn = msgs.find((x) => !x.fromMe)
       const src = (firstIn && detectSource(firstIn.body)) || (ad ? { source: 'meta_ads', campaign: ad.title || 'Meta CTWA' } : null)
-      const [row] = await db('contacts').insert({ company_id: company.id, phone, name: name || `+${phone}`, source: src?.source || 'organico', campaign: src?.campaign || null, created_at: first.created_at }).returning('id')
+      const [row] = await db('contacts').insert({ company_id: company.id, phone, wa_jid: jid, name: name || (jid.endsWith('@lid') ? 'Contacto de WhatsApp' : `+${phone}`), source: src?.source || 'organico', campaign: src?.campaign || null, created_at: first.created_at }).returning('id')
       contact = await db('contacts').where({ id: row.id ?? row }).first()
       contactsCreated++
-    } else if (name && (!contact.name || contact.name === contact.phone || contact.name === `+${phone}`)) {
-      await db('contacts').where({ id: contact.id }).update({ name })
+    } else {
+      const patch = {}
+      if (!contact.wa_jid) patch.wa_jid = jid
+      if (name && (!contact.name || contact.name === contact.phone || contact.name === `+${phone}` || contact.name === 'Contacto de WhatsApp')) patch.name = name
+      if (Object.keys(patch).length) await db('contacts').where({ id: contact.id }).update(patch)
     }
 
     let conv = await db('conversations').where({ company_id: company.id, contact_id: contact.id }).orderBy('id', 'desc').first()

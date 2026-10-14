@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useRealtime, useStore } from '../store.jsx'
-import { api, ago, fmtDate, fmtDateTime, fmtTime, initials, SOURCE_LABEL, getToken } from '../api.js'
+import { api, ago, fmtDate, fmtDateTime, fmtTime, initials, SOURCE_LABEL, getToken, phoneLabel } from '../api.js'
 import { Icon } from '../components/Icons.jsx'
 import { Modal } from '../components/Layout.jsx'
 
@@ -60,7 +60,7 @@ export default function Inbox() {
             <div key={c.id} className={`conv-item ${c.id === selectedId ? 'active' : ''}`} onClick={() => nav(`/bandeja/${c.id}`)}>
               <div className="avatar">{initials(c.contact_name)}</div>
               <div className="body">
-                <div className="top"><span className="name">{c.contact_name || c.contact_phone}</span><span className="time">{ago(c.last_message_at)}</span></div>
+                <div className="top"><span className="name">{c.contact_name || phoneLabel(c.contact_phone, c.contact_jid)}</span><span className="time">{ago(c.last_message_at)}</span></div>
                 <div className="preview">{c.last_message?.direction === 'out' && <Icon name={c.last_message.sender_type === 'bot' ? 'bot' : 'checks'} size={13} className="muted" />}<span>{c.last_message ? c.last_message.body : '—'}</span></div>
                 <div className="meta">
                   {c.stage_name && <span className="chip"><span className="dot" style={{ background: c.stage_color }} />{c.stage_name}</span>}
@@ -143,7 +143,7 @@ function Chat({ id, meta, onChanged, onBack, onTogglePanel }) {
         <div className="chat-head">
           <button className="btn btn-ghost btn-icon back-btn" onClick={onBack} aria-label="Volver"><Icon name="back" size={18} /></button>
           <div className="avatar">{initials(contact.name)}</div>
-          <div><div className="title">{contact.name || contact.phone}</div><div className="sub">+{contact.phone} · {SOURCE_LABEL[contact.source] || contact.source}{contact.campaign ? ` · ${contact.campaign}` : ''} · {c.instance_name}</div></div>
+          <div><div className="title">{contact.name || contact.phone}</div><div className="sub">{phoneLabel(contact.phone, contact.wa_jid)} · {SOURCE_LABEL[contact.source] || contact.source}{contact.campaign ? ` · ${contact.campaign}` : ''} · {c.instance_name}</div></div>
           <div className="actions" style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
             <select className="select" style={{ width: 'auto' }} value={c.status} onChange={(e) => patch({ status: e.target.value })}>
               <option value="open">Abierta</option><option value="pending">Pendiente</option><option value="closed">Cerrada</option>
@@ -230,7 +230,7 @@ function SidePanel({ data, meta, patch, reload, onClose }) {
       <div className="contact-top">
         <div className="avatar">{initials(contact.name)}</div>
         <input className="input" style={{ textAlign: 'center', fontWeight: 600 }} defaultValue={contact.name || ''} onBlur={(e) => e.target.value !== contact.name && saveContact({ name: e.target.value })} />
-        <div className="small text-2">+{contact.phone}{contact.city ? ` · ${contact.city}` : ''}</div>
+        <div className="small text-2">{phoneLabel(contact.phone, contact.wa_jid)}{contact.city ? ` · ${contact.city}` : ''}</div>
         <div className="row" style={{ justifyContent: 'center' }}><span className="chip">{SOURCE_LABEL[contact.source] || contact.source}</span>{contact.campaign && <span className="chip">{contact.campaign}</span>}</div>
       </div>
       <div className="sec">

@@ -23,7 +23,7 @@ export function detectSource(text) {
  * Punto único de entrada de mensajes entrantes (Evolution, demo, o cualquier proveedor futuro).
  * Crea/actualiza contacto y conversación, guarda el mensaje, emite tiempo real y dispara automatizaciones.
  */
-export async function handleInbound(inst, { phone, name, body, type = 'text', waMessageId = null, adReferral = null, media = null }) {
+export async function handleInbound(inst, { phone, name, body, type = 'text', waMessageId = null, adReferral = null, media = null, jid = null }) {
   const company = await db('companies').where({ id: inst.company_id }).first()
   const cleanPhone = String(phone).replace(/\D/g, '')
 
@@ -32,10 +32,15 @@ export async function handleInbound(inst, { phone, name, body, type = 'text', wa
   let isNewContact = false
   if (!contact) {
     isNewContact = true
-    const [row] = await db('contacts').insert({ company_id: company.id, phone: cleanPhone, name: name || cleanPhone,
+    const [row] = await db('contacts').insert({ company_id: company.id, phone: cleanPhone, wa_jid: jid, name: name || (jid?.endsWith('@lid') ? 'Contacto de WhatsApp' : cleanPhone),
       source: detected?.source || 'organico', campaign: detected?.campaign || null }).returning('id')
     contact = await db('contacts').where({ id: row.id ?? row }).first()
-  } else if (detected && contact.source === 'organico') {
+  } else if (jid && contact.wa_jid !== jid) {
+    // Guarda o actualiza el identificador de WhatsApp (y el nombre si llegó vacío)
+    await db('contacts').where({ id: contact.id }).update({ wa_jid: jid, ...(name && (contact.name === contact.phone || contact.name === 'Contacto de WhatsApp') ? { name } : {}) })
+    contact = { ...contact, wa_jid: jid }
+  }
+  if (detected && contact.source === 'organico') {
     await db('contacts').where({ id: contact.id }).update({ source: detected.source, campaign: detected.campaign })
     contact = { ...contact, ...detected }
   }

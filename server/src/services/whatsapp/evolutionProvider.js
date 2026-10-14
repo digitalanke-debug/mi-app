@@ -25,6 +25,9 @@ const EVENTS = ['QRCODE_UPDATED', 'CONNECTION_UPDATE', 'MESSAGES_UPSERT', 'SEND_
 // Evolution v2 descarta el webhook si no lleva enabled: true
 const webhookConfig = (inst) => ({ enabled: true, url: `${config.evolution.webhookBase}/api/whatsapp/webhooks/evolution/${inst.instance_key}`, byEvents: false, base64: true, events: EVENTS })
 
+// Destino para Evolution: un jid completo (p. ej. 123@lid) se respeta; un teléfono se deja en dígitos
+const toNumber = (target) => (String(target).includes('@') ? String(target) : String(target).replace(/\D/g, ''))
+
 // Ignora grupos y pide a WhatsApp el historial completo al vincular (para poder importarlo)
 const INSTANCE_SETTINGS = { rejectCall: false, msgCall: '', groupsIgnore: true, alwaysOnline: false, readMessages: false, readStatus: false, syncFullHistory: true }
 
@@ -168,7 +171,7 @@ export const evolutionProvider = {
 
   /** Envía imagen, documento, video o audio. media = { base64, mime, name, type, caption } */
   async sendMedia(inst, phone, media) {
-    const number = phone.replace(/\D/g, '')
+    const number = toNumber(phone)
     if (media.type === 'audio') {
       const data = await api(`/message/sendWhatsAppAudio/${inst.instance_key}`, { method: 'POST', body: { number, audio: media.base64 } })
       return { id: data?.key?.id || null }
@@ -189,7 +192,7 @@ export const evolutionProvider = {
   async sendText(inst, phone, body) {
     const data = await api(`/message/sendText/${inst.instance_key}`, {
       method: 'POST',
-      body: { number: phone.replace(/\D/g, ''), text: body },
+      body: { number: toNumber(phone), text: body },
     })
     return { id: data?.key?.id || null }
   },
@@ -223,6 +226,7 @@ export const evolutionProvider = {
         const ad = msg.extendedTextMessage?.contextInfo?.externalAdReply
         return {
           phone: phoneFromKey(m.key) || m.key.remoteJid.split('@')[0],
+          jid: phoneFromKey(m.key) ? `${phoneFromKey(m.key)}@s.whatsapp.net` : m.key.remoteJid,
           name: m.pushName || null,
           body: body || '',
           type,

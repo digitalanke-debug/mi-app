@@ -138,3 +138,25 @@ export async function updateMessageStatus(waMessageId, status, error) {
   const conv = await db('conversations').where({ id: msg.conversation_id }).first()
   emitCompany(conv.company_id, 'message:status', { id: msg.id, conversation_id: msg.conversation_id, status, error })
 }
+
+/** Reintenta un mensaje saliente fallido (texto o archivo) y actualiza el mismo registro */
+export async function retryMessage(messageId) {
+  const msg = await db('messages').where({ id: messageId }).first()
+  if (!msg || msg.direction !== 'out' || msg.status !== 'failed') throw new Error('Solo se pueden reintentar mensajes enviados que fallaron')
+  const conv = await db('conversations').where({ id: msg.conversation_id }).first()
+  const contact = await db('contacts').where({ id: conv.contact_id }).first()
+  const inst = conv.instance_id ? await db('whatsapp_instances').where({ id: conv.instance_id }).first() : null
+  if (!inst || inst.status !== 'connected') throw new Error('El número de WhatsApp de esta conversación no está conectado')
+  const target = inst.provider === 'evolution' && contact.wa_jid ? contact.wa_jid : contact.phone
+  let status = 'sent', waId = null, error = null
+  try {
+    const r = msg.media_url
+      ? await providerFor(inst).sendMedia(inst, target, { base64: readMediaBase64(msg.media_url), mime: msg.media_mime, name: msg.media_name, type: msg.type, caption: msg.body || '' })
+      : await providerFor(inst).sendText(inst, target, msg.body)
+    waId = r?.id || null
+  } catch (e) { status = 'failed'; error = e.code === 131047 ? 'Ventana de 24 horas cerrada: envía una plantilla aprobada' : e.message.slice(0, 250) }
+  await db('messages').where({ id: msg.id }).update({ status, wa_message_id: waId, error })
+  emitCompany(conv.company_id, 'message:status', { id: msg.id, conversation_id: msg.conversation_id, status, error })
+  if (status === 'sent' && !conv.first_response_at && msg.sender_type !== 'system') await db('conversations').where({ id: conv.id }).update({ first_response_at: now() })
+  return { ...msg, status, wa_message_id: waId, error }
+}

@@ -119,6 +119,10 @@ function Chat({ id, meta, onChanged, onBack, onTogglePanel }) {
     r.onload = () => setAttach({ base64: String(r.result).split(',')[1], mime: f.type || 'application/octet-stream', name: f.name, preview: f.type.startsWith('image/') ? r.result : null })
     r.readAsDataURL(f)
   }
+  const retry = async (m) => {
+    try { const r = await api(`/conversations/${id}/messages/${m.id}/retry`, { method: 'POST' }); setData((d) => ({ ...d, messages: d.messages.map((x) => (x.id === m.id ? { ...x, ...r } : x)) })); toast(r.status === 'failed' ? `Volvió a fallar: ${r.error}` : 'Mensaje enviado', r.status === 'failed' ? 'error' : 'success') }
+    catch (e) { toast(e.message, 'error') }
+  }
   const simulateImage = async () => { try { await api(`/whatsapp/demo/media/${id}`, { method: 'POST' }) } catch (e) { toast(e.message, 'error') } }
   const fill = (tpl) => tpl.replace(/{{\s*agente\s*}}/g, user.name.split(' ')[0]).replace(/{{\s*nombre\s*}}/g, (data?.contact?.name || '').split(' ')[0]).replace(/{{\s*empresa\s*}}/g, company?.name || '').replace(/{{\s*telefono\s*}}/g, data?.contact?.phone || '')
   const insertEmoji = (e) => { setText((t) => t + e); setPop(null) }
@@ -163,6 +167,7 @@ function Chat({ id, meta, onChanged, onBack, onTogglePanel }) {
                   <MediaView m={m} onZoom={setLightbox} />
                   {m.body && <div className={m.media_url ? 'caption' : ''}>{m.body}</div>}
                   <div className="t">{fmtTime(m.created_at)} {m.direction === 'out' && <MsgStatus m={m} />}</div>
+                  {m.direction === 'out' && m.status === 'failed' && <button className="btn btn-sm" style={{ marginTop: 6 }} onClick={() => retry(m)}><Icon name="refresh" size={13} /> Reintentar</button>}
                 </div>
               </div>
             )

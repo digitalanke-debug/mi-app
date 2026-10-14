@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { db, now } from '../db/knex.js'
 import { requireCompany, ownsRow } from '../auth.js'
-import { loadConversation, sendOutbound, broadcastConversation, logActivity, sendTemplateMessage } from '../services/conversations.js'
+import { loadConversation, sendOutbound, broadcastConversation, logActivity, sendTemplateMessage, retryMessage } from '../services/conversations.js'
 import { aiRespond } from '../services/automations.js'
 import { emitCompany } from '../services/realtime.js'
 
@@ -88,6 +88,13 @@ conversationsRouter.post('/:id/template', canAccess, async (req, res) => {
   if (!req.conv.assigned_user_id) await db('conversations').where({ id: req.conv.id }).update({ assigned_user_id: req.user.id })
   try { res.json(await sendTemplateMessage(req.conv.id, { name, language, params: params || [], body, userId: req.user.id })) }
   catch (e) { res.status(400).json({ error: e.message }) }
+})
+
+// Reintentar un mensaje fallido
+conversationsRouter.post('/:id/messages/:msgId/retry', canAccess, async (req, res) => {
+  const msg = await db('messages').where({ id: req.params.msgId, conversation_id: req.conv.id }).first()
+  if (!msg) return res.status(404).json({ error: 'No existe' })
+  try { res.json(await retryMessage(msg.id)) } catch (e) { res.status(400).json({ error: e.message }) }
 })
 
 conversationsRouter.post('/:id/read', canAccess, async (req, res) => {

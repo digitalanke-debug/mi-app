@@ -19,6 +19,12 @@ export const config = {
     apiKey: process.env.EVOLUTION_API_KEY || '',
     webhookBase: process.env.WEBHOOK_BASE_URL || 'http://server:4000',
   },
+  // API oficial de WhatsApp (Meta Cloud API)
+  meta: {
+    graphBase: process.env.META_GRAPH_BASE || 'https://graph.facebook.com',
+    version: process.env.META_GRAPH_VERSION || 'v23.0',
+    verifyToken: process.env.META_VERIFY_TOKEN || '',
+  },
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
   demoAutoLeads: process.env.DEMO_AUTO_LEADS !== 'false',
   seedOnEmpty: process.env.SEED_ON_EMPTY === 'true',

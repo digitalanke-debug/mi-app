@@ -15,7 +15,7 @@ export async function loadConversation(id) {
     .leftJoin('pipeline_stages as s', 's.id', 'c.stage_id')
     .leftJoin('whatsapp_instances as w', 'w.id', 'c.instance_id')
     .select('c.*', 'ct.name as contact_name', 'ct.phone as contact_phone', 'ct.source as contact_source', 'ct.campaign as contact_campaign', 'ct.city as contact_city',
-      'u.name as assigned_name', 's.name as stage_name', 's.color as stage_color', 'w.name as instance_name')
+      'u.name as assigned_name', 's.name as stage_name', 's.color as stage_color', 'w.name as instance_name', 'w.provider as instance_provider')
     .where('c.id', id).first()
   if (!c) return null
   c.tags = await db('conversation_tags as ctg').join('tags as t', 't.id', 'ctg.tag_id').where('ctg.conversation_id', id).select('t.id', 't.name', 't.color')
@@ -41,6 +41,7 @@ export async function sendOutbound(conversationId, { body, senderType = 'user', 
 
   let waId = null
   let status = 'sent'
+  let errorMsg = null
   let saved = null
   if (media) { saved = saveMedia({ base64: media.base64, mime: media.mime, name: media.name }); type = saved.type }
   if (inst && inst.status === 'connected') {
@@ -52,6 +53,7 @@ export async function sendOutbound(conversationId, { body, senderType = 'user', 
     } catch (e) {
       console.error('Error enviando por WhatsApp:', e.message)
       status = 'failed'
+      errorMsg = e.code === 131047 ? 'Ventana de 24 horas cerrada: envía una plantilla aprobada' : e.message.slice(0, 250)
     }
   } else {
     status = 'failed'
@@ -61,7 +63,7 @@ export async function sendOutbound(conversationId, { body, senderType = 'user', 
   const [row] = await db('messages').insert({
     conversation_id: conversationId, direction: 'out', sender_type: senderType, sender_user_id: userId,
     type, body: body || '', wa_message_id: waId, status, created_at: ts,
-    media_url: saved?.url || null, media_name: saved?.name || null, media_mime: saved?.mime || null, media_size: saved?.size || null,
+    media_url: saved?.url || null, media_name: saved?.name || null, media_mime: saved?.mime || null, media_size: saved?.size || null, error: errorMsg,
   }).returning('id')
   const msgId = row.id ?? row
   const patch = { last_message_at: ts, last_outbound_at: ts, unread_count: 0 }
@@ -99,4 +101,38 @@ export async function assignRoundRobin(conversationId, companyId) {
   const pick = agents.sort((a, b) => (loadMap[a.id] || 0) - (loadMap[b.id] || 0))[0]
   await db('conversations').where({ id: conversationId }).update({ assigned_user_id: pick.id })
   return pick.id
+}
+
+/** Envía una plantilla aprobada (API oficial). Se usa para escribir fuera de la ventana de 24 horas. */
+export async function sendTemplateMessage(conversationId, { name, language, params = [], body, userId }) {
+  const conv = await db('conversations').where({ id: conversationId }).first()
+  const contact = await db('contacts').where({ id: conv.contact_id }).first()
+  const inst = conv.instance_id ? await db('whatsapp_instances').where({ id: conv.instance_id }).first() : null
+  if (!inst || inst.provider !== 'meta') throw new Error('Las plantillas solo aplican a números de la API oficial')
+  let waId = null, status = 'sent', errorMsg = null
+  try { waId = (await providerFor(inst).sendTemplate(inst, contact.phone, { name, language, params }))?.id || null }
+  catch (e) { status = 'failed'; errorMsg = e.message.slice(0, 250) }
+  const ts = now()
+  const [row] = await db('messages').insert({ conversation_id: conversationId, direction: 'out', sender_type: 'user', sender_user_id: userId, type: 'text',
+    body: body || `[Plantilla ${name}]`, wa_message_id: waId, status, error: errorMsg, created_at: ts }).returning('id')
+  const patch = { last_message_at: ts, last_outbound_at: ts, unread_count: 0 }
+  if (!conv.first_response_at) patch.first_response_at = ts
+  if (conv.status === 'closed') patch.status = 'open'
+  await db('conversations').where({ id: conversationId }).update(patch)
+  const msg = await db('messages').where({ id: row.id ?? row }).first()
+  emitCompany(conv.company_id, 'message:new', { ...msg, company_id: conv.company_id })
+  await broadcastConversation(conversationId)
+  if (status === 'failed') { const e = new Error(errorMsg); e.message_row = msg; throw e }
+  return msg
+}
+
+/** Actualiza el estado de entrega de un mensaje saliente (enviado, entregado, leído, fallido) */
+export async function updateMessageStatus(waMessageId, status, error) {
+  const msg = await db('messages').where({ wa_message_id: waMessageId }).first()
+  if (!msg) return
+  const order = { pending: 0, sent: 1, delivered: 2, read: 3, failed: 4 }
+  if (status !== 'failed' && (order[msg.status] ?? 0) >= (order[status] ?? 0)) return
+  await db('messages').where({ id: msg.id }).update({ status, error: error || msg.error || null })
+  const conv = await db('conversations').where({ id: msg.conversation_id }).first()
+  emitCompany(conv.company_id, 'message:status', { id: msg.id, conversation_id: msg.conversation_id, status, error })
 }

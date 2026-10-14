@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useRealtime, useStore } from '../store.jsx'
 import { api, ago, fmtDate, fmtDateTime, fmtTime, initials, SOURCE_LABEL, getToken } from '../api.js'
 import { Icon } from '../components/Icons.jsx'
+import { Modal } from '../components/Layout.jsx'
 
 const FILTERS = [['open', 'Abiertas'], ['mine', 'Mías'], ['unassigned', 'Sin asignar'], ['pending', 'Pendientes'], ['closed', 'Cerradas'], ['all', 'Todas']]
 
@@ -87,6 +88,7 @@ function Chat({ id, meta, onChanged, onBack, onTogglePanel }) {
   const [attach, setAttach] = useState(null) // { base64, mime, name, preview }
   const [pop, setPop] = useState(null) // 'emoji' | 'tpl' | null
   const [lightbox, setLightbox] = useState(null)
+  const [tplOpen, setTplOpen] = useState(false)
   const fileRef = useRef(null)
   const endRef = useRef(null)
 
@@ -95,6 +97,7 @@ function Chat({ id, meta, onChanged, onBack, onTogglePanel }) {
   useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }) }, [data?.messages?.length])
 
   useRealtime('message:new', (m) => { if (m.conversation_id === id) setData((d) => d && !d.messages.find((x) => x.id === m.id) ? { ...d, messages: [...d.messages, m] } : d) })
+  useRealtime('message:status', (u) => { if (u.conversation_id === id) setData((d) => d ? { ...d, messages: d.messages.map((x) => (x.id === u.id ? { ...x, status: u.status, error: u.error || x.error } : x)) } : d) })
   useRealtime('conversation:update', (c) => { if (c.id === id) setData((d) => d ? { ...d, conversation: c } : d) })
   useRealtime('typing', (t) => { if (t.conversationId === id && t.user !== user.name) { setTyping(t.user); setTimeout(() => setTyping(null), 2500) } })
 
@@ -159,7 +162,7 @@ function Chat({ id, meta, onChanged, onBack, onTogglePanel }) {
                   {m.direction === 'out' && m.sender_type !== 'system' && <div className="who">{m.sender_type === 'bot' ? <><Icon name="bot" size={13} /> Agente IA</> : m.sender_name || 'Asesor'}</div>}
                   <MediaView m={m} onZoom={setLightbox} />
                   {m.body && <div className={m.media_url ? 'caption' : ''}>{m.body}</div>}
-                  <div className="t">{fmtTime(m.created_at)} {m.direction === 'out' && (m.status === 'failed' ? <span className="fail" title="No se pudo enviar: instancia desconectada"><Icon name="x" size={11} /> no enviado</span> : <Icon name="checks" size={13} />)}</div>
+                  <div className="t">{fmtTime(m.created_at)} {m.direction === 'out' && <MsgStatus m={m} />}</div>
                 </div>
               </div>
             )
@@ -167,6 +170,10 @@ function Chat({ id, meta, onChanged, onBack, onTogglePanel }) {
           {typing && <div className="typing">{typing} está escribiendo…</div>}
           <div ref={endRef} />
         </div>
+        {c.instance_provider === 'meta' && !windowIsOpen(c.last_inbound_at) && <div className="alert" style={{ margin: '0 14px 8px', alignItems: 'center' }}>
+          <Icon name="clock" size={15} /><div style={{ flex: 1 }}>Ventana de 24 horas cerrada. WhatsApp solo permite escribirle a este cliente con una <b>plantilla aprobada</b> hasta que vuelva a responder.</div>
+          <button className="btn btn-sm btn-primary" onClick={() => setTplOpen(true)}>Enviar plantilla</button></div>}
+        {tplOpen && <TemplateModal conv={c} contact={contact} user={user} onClose={() => setTplOpen(false)} onSent={() => { setTplOpen(false); load() }} />}
         <div className="chat-compose">
           {attach && <div className="attach-preview">{attach.preview ? <img src={attach.preview} alt="" /> : <Icon name="file" size={22} />}<div style={{ flex: 1 }}><b>{attach.name}</b><div className="muted">{attach.mime}</div></div><button className="btn btn-ghost btn-icon" onClick={() => setAttach(null)}><Icon name="x" size={14} /></button></div>}
           <div className="box" style={{ position: 'relative' }}>
@@ -182,6 +189,7 @@ function Chat({ id, meta, onChanged, onBack, onTogglePanel }) {
             <button className="btn btn-sm" onClick={() => fileRef.current?.click()} title="Adjuntar imagen, audio o documento"><Icon name="paperclip" size={14} /> Adjuntar</button>
             <button className="btn btn-sm" onClick={() => setPop(pop === 'emoji' ? null : 'emoji')}><Icon name="smile" size={14} /></button>
             <button className="btn btn-sm" onClick={() => setPop(pop === 'tpl' ? null : 'tpl')}><Icon name="template" size={14} /> Plantillas</button>
+            {c.instance_provider === 'meta' && <button className="btn btn-sm" onClick={() => setTplOpen(true)}><Icon name="wa" size={14} /> Plantilla de Meta</button>}
             <button className="btn btn-sm" onClick={aiReply} disabled={busy}><Icon name="sparkles" size={14} /> {busy ? 'Pensando…' : 'Que responda la IA'}</button>
             <label className="row small" style={{ gap: 6 }}><button className={`toggle ${c.ai_enabled ? 'on' : ''}`} onClick={() => patch({ ai_enabled: !c.ai_enabled })} /> IA automática en este chat</label>
             {c.instance_name?.startsWith('WhatsApp') && <button className="btn btn-sm btn-ghost muted" onClick={simulate} title="Solo demo: simula que el cliente escribe"><Icon name="flask" size={14} /> Simular respuesta</button>}
@@ -284,4 +292,50 @@ function MediaView({ m, onZoom }) {
   if (m.type === 'video') return <video controls src={src} preload="metadata" />
   const kb = m.media_size ? `${Math.round(m.media_size / 1024)} KB` : ''
   return <a className="doc" href={src} target="_blank" rel="noreferrer" download={m.media_name || true}><Icon name="file" size={20} /><div><b>{m.media_name || 'Documento'}</b><br /><small>{m.media_mime} {kb}</small></div></a>
+}
+
+const windowIsOpen = (iso) => !!iso && Date.now() - new Date(iso).getTime() < 24 * 3600_000
+
+function MsgStatus({ m }) {
+  if (m.status === 'failed') return <span className="fail" title={m.error || 'No se pudo enviar'}><Icon name="x" size={11} /> no enviado{m.error ? `: ${m.error}` : ''}</span>
+  if (m.status === 'read') return <span title="Leído" style={{ color: '#3b82f6', display: 'inline-flex' }}><Icon name="checks" size={13} /></span>
+  if (m.status === 'delivered') return <span title="Entregado" style={{ display: 'inline-flex' }}><Icon name="checks" size={13} /></span>
+  return <span title="Enviado" style={{ display: 'inline-flex' }}><Icon name="check" size={13} /></span>
+}
+
+/** Envío de plantillas aprobadas por Meta (necesarias fuera de la ventana de 24 horas) */
+function TemplateModal({ conv, contact, user, onClose, onSent }) {
+  const { toast } = useStore()
+  const [list, setList] = useState(null)
+  const [sel, setSel] = useState(null)
+  const [params, setParams] = useState([])
+  const [busy, setBusy] = useState(false)
+  useEffect(() => {
+    api(`/whatsapp/instances/${conv.instance_id}/templates`).then(setList).catch((e) => { toast(e.message, 'error'); setList([]) })
+  }, [conv.instance_id, toast])
+  const pick = (t) => {
+    setSel(t)
+    const first = (contact.name || '').split(' ')[0]
+    setParams(Array.from({ length: t.vars }, (_, i) => (i === 0 ? first : i === 1 ? user.name.split(' ')[0] : '')))
+  }
+  const preview = sel ? sel.body.replace(/{{\s*(\d+)\s*}}/g, (_, n) => params[Number(n) - 1] || `{{${n}}}`) : ''
+  const send = async () => {
+    if (params.some((p) => !p.trim())) return toast('Completa todas las variables', 'error')
+    setBusy(true)
+    try { await api(`/conversations/${conv.id}/template`, { method: 'POST', body: { name: sel.name, language: sel.language, params, body: preview } }); toast('Plantilla enviada', 'success'); onSent() }
+    catch (e) { toast(e.message, 'error') } finally { setBusy(false) }
+  }
+  return (
+    <Modal title="Enviar plantilla aprobada" onClose={onClose} footer={sel && <button className="btn btn-primary" disabled={busy} onClick={send}>{busy ? 'Enviando…' : 'Enviar'}</button>}>
+      {!list && <div className="empty">Cargando plantillas de Meta…</div>}
+      {list && list.length === 0 && <div className="empty small">No hay plantillas aprobadas. Créalas en Meta Business → Administrador de WhatsApp → Plantillas de mensajes.</div>}
+      {list && !sel && list.map((t) => <div key={t.name + t.language} className="tpl-item" onClick={() => pick(t)}><b>{t.name} · {t.language} · {t.category}</b><span>{t.body}</span></div>)}
+      {sel && <>
+        <button className="btn btn-sm btn-ghost" style={{ alignSelf: 'flex-start' }} onClick={() => setSel(null)}><Icon name="back" size={14} /> Otras plantillas</button>
+        {sel.header_format && sel.header_format !== 'TEXT' && <div className="alert">Esta plantilla tiene encabezado de tipo {sel.header_format}; el CRM envía solo el cuerpo de texto. Usa plantillas sin imagen en el encabezado.</div>}
+        {params.map((p, i) => <div key={i} className="field"><label>Variable {`{{${i + 1}}}`}</label><input className="input" value={p} onChange={(e) => setParams(params.map((x, j) => (j === i ? e.target.value : x)))} /></div>)}
+        <div className="field"><label>Vista previa</label><div className="msg out" style={{ maxWidth: '100%', alignSelf: 'stretch' }}>{preview}</div></div>
+      </>}
+    </Modal>
+  )
 }

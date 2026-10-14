@@ -36,6 +36,7 @@ En modo demo no hace falta Docker, PostgreSQL ni un celular: el QR es simulado, 
 - **Origen de los leads**: código `[GA-…]`, `[META-…]`, `[WEB-…]`, `[REF-…]` en el primer mensaje (enlaces wa.me desde Google Ads, Meta Ads, web) y webhook `POST /api/whatsapp/webhooks/lead/:companyId` para formularios.
 - **Dashboard**: leads, conversión, primera respuesta, valor ganado, por origen / campaña / etapa / asesor / servicio.
 - **Equipo**: usuarios, roles (admin/asesor) y acceso por empresa.
+- **WhatsApp por QR o por API oficial de Meta** (sin celular, plantillas aprobadas, estados de entrega, ventana de 24 horas). Ver [docs/WHATSAPP-API-OFICIAL.md](docs/WHATSAPP-API-OFICIAL.md).
 - **Adjuntos**: imágenes, audios, videos y documentos en ambas direcciones, con visor de imágenes.
 - **Plantillas** con variables y selector de emojis. **Modo oscuro**, **vista móvil** y **avisos** de escritorio con sonido.
 - **Marketing**: inversión por campaña (importación manual o API de Google Ads), costo por lead y por cierre, retorno; comparativo entre empresas; exportación CSV.

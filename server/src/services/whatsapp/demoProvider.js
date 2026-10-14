@@ -1,6 +1,7 @@
 import QRCode from 'qrcode'
 import { db, now } from '../../db/knex.js'
 import { emitCompany } from '../realtime.js'
+import { publicInstance } from './public.js'
 
 /**
  * Proveedor DEMO: simula el flujo de WhatsApp Business por QR sin conectar
@@ -12,7 +13,7 @@ const timers = new Map()
 async function updateInstance(id, patch) {
   await db('whatsapp_instances').where({ id }).update(patch)
   const inst = await db('whatsapp_instances').where({ id }).first()
-  emitCompany(inst.company_id, 'instance:update', inst)
+  emitCompany(inst.company_id, 'instance:update', publicInstance(inst))
   return inst
 }
 

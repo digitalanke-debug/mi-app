@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { db, now } from '../db/knex.js'
 import { requireCompany, ownsRow } from '../auth.js'
-import { loadConversation, sendOutbound, broadcastConversation, logActivity } from '../services/conversations.js'
+import { loadConversation, sendOutbound, broadcastConversation, logActivity, sendTemplateMessage } from '../services/conversations.js'
 import { aiRespond } from '../services/automations.js'
 import { emitCompany } from '../services/realtime.js'
 
@@ -36,7 +36,7 @@ conversationsRouter.get('/', requireCompany, async (req, res) => {
     .leftJoin('whatsapp_instances as w', 'w.id', 'c.instance_id')
     .orderBy('c.last_message_at', 'desc').limit(Number(limit))
     .select('c.*', 'ct.name as contact_name', 'ct.phone as contact_phone', 'ct.source as contact_source', 'ct.campaign as contact_campaign', 'ct.city as contact_city',
-      'u.name as assigned_name', 's.name as stage_name', 's.color as stage_color', 'w.name as instance_name')
+      'u.name as assigned_name', 's.name as stage_name', 's.color as stage_color', 'w.name as instance_name', 'w.provider as instance_provider')
   const ids = rows.map((r) => r.id)
   const tags = ids.length ? await db('conversation_tags as ctg').join('tags as t', 't.id', 'ctg.tag_id').whereIn('ctg.conversation_id', ids).select('ctg.conversation_id', 't.id', 't.name', 't.color') : []
   const lastIds = ids.length ? await db('messages').whereIn('conversation_id', ids).groupBy('conversation_id').select('conversation_id').max('id as id') : []
@@ -79,6 +79,15 @@ conversationsRouter.post('/:id/media', canAccess, async (req, res) => {
     const msg = await sendOutbound(conv.id, { body: caption || '', senderType: 'user', userId: req.user.id, media: { base64, mime, name } })
     res.json(msg)
   } catch (e) { res.status(400).json({ error: e.message }) }
+})
+
+// Enviar plantilla aprobada (API oficial). body: { name, language, params: [], body }
+conversationsRouter.post('/:id/template', canAccess, async (req, res) => {
+  const { name, language, params, body } = req.body || {}
+  if (!name || !language) return res.status(400).json({ error: 'Falta la plantilla' })
+  if (!req.conv.assigned_user_id) await db('conversations').where({ id: req.conv.id }).update({ assigned_user_id: req.user.id })
+  try { res.json(await sendTemplateMessage(req.conv.id, { name, language, params: params || [], body, userId: req.user.id })) }
+  catch (e) { res.status(400).json({ error: e.message }) }
 })
 
 conversationsRouter.post('/:id/read', canAccess, async (req, res) => {

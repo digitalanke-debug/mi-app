@@ -31,7 +31,7 @@ app.set('trust proxy', 1) // detrás de Caddy/Nginx
 app.disable('x-powered-by')
 if (process.env.NODE_ENV === 'production' && config.jwtSecret === 'cambiar-en-produccion') console.warn('ADVERTENCIA: JWT_SECRET por defecto en producción')
 app.use(cors({ origin: true, credentials: true }))
-app.use(express.json({ limit: '30mb' }))
+app.use(express.json({ limit: '30mb', verify: (req, res, buf) => { if (req.originalUrl.startsWith('/api/whatsapp/webhooks/')) req.rawBody = buf } }))
 app.use('/uploads', requireAuthOrToken, express.static(UPLOAD_DIR, { maxAge: '7d', index: false }))
 
 app.get('/api/health', (req, res) => res.json({ ok: true, provider: config.whatsappProvider, db: config.dbClient }))

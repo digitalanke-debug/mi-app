@@ -1,5 +1,6 @@
 import { db, now } from '../db/knex.js'
-import { evolutionMessages, describeEvolutionMessage, phoneFromKey } from './whatsapp/evolutionProvider.js'
+import { evolutionMessages, describeEvolutionMessage, phoneFromKey, lidFromKey } from './whatsapp/evolutionProvider.js'
+import { findContactByLid, setContactPhone } from './contactIdentity.js'
 import { logActivity } from './conversations.js'
 import { detectSource } from './inbound.js'
 
@@ -21,12 +22,15 @@ export async function importEvolutionHistory(inst, { days = 365 } = {}) {
 
   // Agrupa por teléfono
   const byPhone = new Map()
+  const lidToPhone = new Map() // @lid -> teléfono, cuando algún mensaje trae ambos
   let scanned = 0, skippedNoPhone = 0, skippedOld = 0
   for await (const m of evolutionMessages(inst)) {
     scanned++
     const jid = m.key?.remoteJid || ''
     if (jid.endsWith('@g.us') || jid === 'status@broadcast' || jid.endsWith('@newsletter') || jid.endsWith('@broadcast')) continue
     const realPhone = phoneFromKey(m.key)
+    const lid = lidFromKey(m.key)
+    if (lid && realPhone) lidToPhone.set(lid, realPhone)
     const isLid = !realPhone && jid.endsWith('@lid')
     if (!realPhone && !isLid) { skippedNoPhone++; continue }
     const phone = realPhone || jid.split('@')[0]
@@ -34,28 +38,43 @@ export async function importEvolutionHistory(inst, { days = 365 } = {}) {
     if (new Date(created_at).getTime() < since) { skippedOld++; continue }
     const d = describeEvolutionMessage(m)
     if (!d.body) continue
-    const entry = byPhone.get(phone) || { name: null, msgs: [], jid: realPhone ? `${realPhone}@s.whatsapp.net` : jid }
+    const entry = byPhone.get(phone) || { name: null, msgs: [], jid: realPhone ? `${realPhone}@s.whatsapp.net` : jid, lid: null, hidden: !realPhone }
+    if (lid) entry.lid = lid
     if (!m.key.fromMe && m.pushName && !entry.name) entry.name = m.pushName
     entry.msgs.push({ id: m.key.id, fromMe: !!m.key.fromMe, body: d.body, type: d.type, created_at, ad: d.ad })
     byPhone.set(phone, entry)
   }
 
+  // Chats que llegaron con número oculto pero en otro mensaje WhatsApp sí reveló el teléfono: se unen
+  for (const [key, e] of [...byPhone]) {
+    const real = e.hidden && lidToPhone.get(e.jid)
+    if (!real) continue
+    const target = byPhone.get(real) || { name: null, msgs: [], jid: `${real}@s.whatsapp.net`, lid: e.jid, hidden: false }
+    target.msgs.push(...e.msgs); target.name = target.name || e.name; target.lid = target.lid || e.jid
+    byPhone.set(real, target); byPhone.delete(key)
+  }
+
   let contactsCreated = 0, conversationsCreated = 0, messagesImported = 0
   const recentLimit = Date.now() - 7 * 86400_000
-  for (const [phone, { name, msgs, jid }] of byPhone) {
+  for (const [phone, { name, msgs, jid, lid, hidden }] of byPhone) {
     msgs.sort((a, b) => a.created_at.localeCompare(b.created_at))
     const first = msgs[0], last = msgs[msgs.length - 1]
     let contact = await db('contacts').where({ company_id: company.id, phone }).first()
+    if (!contact && lid) {
+      contact = await findContactByLid(company.id, lid)
+      if (contact && !hidden) contact = await setContactPhone(contact, phone, { verified: true })
+    }
     if (!contact) {
       const ad = msgs.find((x) => x.ad)?.ad
       const firstIn = msgs.find((x) => !x.fromMe)
       const src = (firstIn && detectSource(firstIn.body)) || (ad ? { source: 'meta_ads', campaign: ad.title || 'Meta CTWA' } : null)
-      const [row] = await db('contacts').insert({ company_id: company.id, phone, wa_jid: jid, name: name || (jid.endsWith('@lid') ? 'Contacto de WhatsApp' : `+${phone}`), source: src?.source || 'organico', campaign: src?.campaign || null, created_at: first.created_at }).returning('id')
+      const [row] = await db('contacts').insert({ company_id: company.id, phone, wa_jid: jid, wa_lid: lid, name: name || (jid.endsWith('@lid') ? 'Contacto de WhatsApp' : `+${phone}`), source: src?.source || 'organico', campaign: src?.campaign || null, created_at: first.created_at }).returning('id')
       contact = await db('contacts').where({ id: row.id ?? row }).first()
       contactsCreated++
     } else {
       const patch = {}
       if (!contact.wa_jid) patch.wa_jid = jid
+      if (lid && !contact.wa_lid) patch.wa_lid = lid
       if (name && (!contact.name || contact.name === contact.phone || contact.name === `+${phone}` || contact.name === 'Contacto de WhatsApp')) patch.name = name
       if (Object.keys(patch).length) await db('contacts').where({ id: contact.id }).update(patch)
     }

@@ -51,6 +51,37 @@ export function phoneFromKey(key = {}) {
   return null
 }
 
+/** Identificador privado @lid de un mensaje, si WhatsApp lo incluyó */
+export function lidFromKey(key = {}) {
+  for (const j of [key.remoteJid, key.remoteJidAlt, key.senderLid]) if (j && j.endsWith('@lid')) return j
+  return null
+}
+
+/**
+ * Busca el teléfono real de un identificador @lid en lo que Evolution tiene guardado:
+ * 1) mensajes de ese chat que WhatsApp entregó con el número (remoteJidAlt), 2) la caché de números de Evolution.
+ * Devuelve los dígitos del teléfono o null si WhatsApp nunca lo reveló.
+ */
+export async function lookupPhoneForLid(inst, lid) {
+  try {
+    const r = await api(`/chat/findMessages/${inst.instance_key}`, { method: 'POST', body: { where: { key: { remoteJid: lid, remoteJidAlt: lid } }, offset: 200, page: 1 } })
+    for (const m of r?.messages?.records || []) { const p = phoneFromKey(m.key); if (p) return p }
+  } catch (e) { console.warn('lid findMessages:', e.message) }
+  try {
+    const r = await api(`/chat/whatsappNumbers/${inst.instance_key}`, { method: 'POST', body: { numbers: [lid] } })
+    const jid = (Array.isArray(r) ? r : [])[0]?.jid
+    if (jid && jid.endsWith('@s.whatsapp.net')) return jid.split('@')[0]
+  } catch (e) { console.warn('lid whatsappNumbers:', e.message) }
+  return null
+}
+
+/** El webhook reemplaza el @lid por el teléfono; Evolution guarda el mensaje original, de ahí lo recuperamos */
+export async function lidForMessage(inst, waMessageId) {
+  if (!waMessageId) return null
+  const r = await api(`/chat/findMessages/${inst.instance_key}`, { method: 'POST', body: { where: { key: { id: waMessageId } }, offset: 1, page: 1 } })
+  return lidFromKey(r?.messages?.records?.[0]?.key)
+}
+
 /** Recorre todos los mensajes guardados por Evolution para un número (más recientes primero) */
 export async function* evolutionMessages(inst, { pageSize = 250, maxMessages = 30000 } = {}) {
   let page = 1, seen = 0
@@ -183,6 +214,9 @@ export const evolutionProvider = {
     return { id: data?.key?.id || null }
   },
 
+  lidForMessage,
+  lookupPhoneForLid,
+
   /** Descarga el contenido de un mensaje multimedia (base64) */
   async fetchMediaBase64(inst, waMessageId) {
     const data = await api(`/chat/getBase64FromMediaMessage/${inst.instance_key}`, { method: 'POST', body: { message: { key: { id: waMessageId } }, convertToMp4: false } })
@@ -227,6 +261,7 @@ export const evolutionProvider = {
         return {
           phone: phoneFromKey(m.key) || m.key.remoteJid.split('@')[0],
           jid: phoneFromKey(m.key) ? `${phoneFromKey(m.key)}@s.whatsapp.net` : m.key.remoteJid,
+          lid: lidFromKey(m.key),
           name: m.pushName || null,
           body: body || '',
           type,

@@ -54,7 +54,7 @@ export function StoreProvider({ children }) {
     const s = io({ auth: { token: getToken() } })
     socketRef.current = s
     const forward = (event) => (payload) => listeners.current.get(event)?.forEach((fn) => fn(payload))
-    for (const ev of ['message:new', 'conversation:update', 'instance:update', 'notification', 'typing']) s.on(ev, forward(ev))
+    for (const ev of ['message:new', 'message:status', 'conversation:update', 'conversation:removed', 'instance:update', 'notification', 'typing']) s.on(ev, forward(ev))
     s.on('notification', (n) => toast(n.body, 'warn'))
     s.on('message:new', (m) => {
       if (m.direction !== 'in') return

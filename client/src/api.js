@@ -36,5 +36,7 @@ export function ago(iso) {
 
 export const SOURCE_LABEL = { google_ads: 'Google Ads', meta_ads: 'Meta Ads', organico: 'Orgánico', referido: 'Referido', web: 'Web' }
 /** Teléfono para mostrar. WhatsApp a veces oculta el número y entrega un identificador privado (@lid) */
-export const phoneLabel = (phone, jid) => (jid && String(jid).endsWith('@lid') ? 'Número oculto por WhatsApp' : phone ? `+${phone}` : '')
+// WhatsApp a veces oculta el número y solo da un identificador @lid; mientras no sepamos el real, el "teléfono" guardado es ese identificador
+export const isHiddenPhone = (phone, jid) => !!jid && String(jid).endsWith('@lid') && String(jid).split('@')[0] === String(phone)
+export const phoneLabel = (phone, jid) => (isHiddenPhone(phone, jid) ? 'Número oculto por WhatsApp' : phone ? `+${phone}` : '')
 export const initials = (name) => (name || '?').split(' ').slice(0, 2).map((w) => w[0]).join('').toUpperCase()

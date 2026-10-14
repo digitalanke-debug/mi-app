@@ -20,6 +20,7 @@ export default function Pipeline() {
   }, [companyId])
   useEffect(() => { load() }, [load])
   useRealtime('conversation:update', (c) => { if (c.company_id === companyId) setConvs((cur) => [c, ...cur.filter((x) => x.id !== c.id)]) })
+  useRealtime('conversation:removed', (r) => setConvs((cur) => cur.filter((x) => x.id !== r.id)))
 
   const pipeline = pipelines[0]
   if (!pipeline) return <div className="page"><div className="empty">Sin pipeline</div></div>

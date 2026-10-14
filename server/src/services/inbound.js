@@ -4,6 +4,7 @@ import { loadConversation, logActivity } from './conversations.js'
 import { fire } from './automations.js'
 import { saveMedia } from './media.js'
 import { providerFor } from './whatsapp/index.js'
+import { findContactByLid, setContactPhone, resolveHiddenPhone } from './contactIdentity.js'
 
 /**
  * Detecta código de campaña en el primer mensaje.
@@ -23,19 +24,28 @@ export function detectSource(text) {
  * Punto único de entrada de mensajes entrantes (Evolution, demo, o cualquier proveedor futuro).
  * Crea/actualiza contacto y conversación, guarda el mensaje, emite tiempo real y dispara automatizaciones.
  */
-export async function handleInbound(inst, { phone, name, body, type = 'text', waMessageId = null, adReferral = null, media = null, jid = null }) {
+export async function handleInbound(inst, { phone, name, body, type = 'text', waMessageId = null, adReferral = null, media = null, jid = null, lid = null }) {
   const company = await db('companies').where({ id: inst.company_id }).first()
   const cleanPhone = String(phone).replace(/\D/g, '')
 
   let contact = await db('contacts').where({ company_id: company.id, phone: cleanPhone }).first()
+  if (jid?.endsWith('@lid')) lid = jid
+  if (!contact && lid) contact = await findContactByLid(company.id, lid)
+  if (!contact && !jid?.endsWith('@lid') && providerFor(inst).lidForMessage) {
+    // Llegó con número real: si antes esta persona escribió con número oculto, se completa ese contacto en vez de crear otro
+    try { lid = lid || await providerFor(inst).lidForMessage(inst, waMessageId) } catch (e) { console.warn('lidForMessage:', e.message) }
+    const hidden = lid && await findContactByLid(company.id, lid)
+    if (hidden) contact = await setContactPhone(hidden, cleanPhone, { verified: true })
+  }
+  if (contact && lid && !contact.wa_lid) { await db('contacts').where({ id: contact.id }).update({ wa_lid: lid }); contact = { ...contact, wa_lid: lid } }
   const detected = detectSource(body) || adReferral
   let isNewContact = false
   if (!contact) {
     isNewContact = true
-    const [row] = await db('contacts').insert({ company_id: company.id, phone: cleanPhone, wa_jid: jid, name: name || (jid?.endsWith('@lid') ? 'Contacto de WhatsApp' : cleanPhone),
+    const [row] = await db('contacts').insert({ company_id: company.id, phone: cleanPhone, wa_jid: jid, wa_lid: lid, name: name || (jid?.endsWith('@lid') ? 'Contacto de WhatsApp' : cleanPhone),
       source: detected?.source || 'organico', campaign: detected?.campaign || null }).returning('id')
     contact = await db('contacts').where({ id: row.id ?? row }).first()
-  } else if (jid && contact.wa_jid !== jid) {
+  } else if (jid && contact.wa_jid !== jid && !(contact.wa_jid?.endsWith('@lid') && jid.endsWith('@s.whatsapp.net'))) {
     // Guarda o actualiza el identificador de WhatsApp (y el nombre si llegó vacío)
     await db('contacts').where({ id: contact.id }).update({ wa_jid: jid, ...(name && (contact.name === contact.phone || contact.name === 'Contacto de WhatsApp') ? { name } : {}) })
     contact = { ...contact, wa_jid: jid }
@@ -83,5 +93,7 @@ export async function handleInbound(inst, { phone, name, body, type = 'text', wa
   await fire('keyword', ctx)
   await fire('message_in', ctx)
   emitCompany(company.id, 'conversation:update', await loadConversation(conv.id))
+  // Número oculto: intenta descubrir el real en segundo plano
+  if (isNewContact && contact.wa_jid?.endsWith('@lid')) resolveHiddenPhone(contact, inst).catch((e) => console.warn('resolver lid:', e.message))
   return { conversation: conv, message, isNew }
 }

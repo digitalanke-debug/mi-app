@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useRealtime, useStore } from '../store.jsx'
-import { api, ago, fmtDate, fmtDateTime, fmtTime, initials, SOURCE_LABEL, getToken, phoneLabel } from '../api.js'
+import { api, ago, fmtDate, fmtDateTime, fmtTime, initials, SOURCE_LABEL, getToken, phoneLabel, isHiddenPhone } from '../api.js'
 import { Icon } from '../components/Icons.jsx'
 import { Modal } from '../components/Layout.jsx'
 
@@ -35,6 +35,11 @@ export default function Inbox() {
     ]).then(([tags, pipes, users, quick]) => setMeta({ tags, stages: pipes.flatMap((p) => p.stages), users, quick })).catch(() => {})
   }, [companyId])
 
+  // Dos chats de la misma persona se unieron (p. ej. al descubrir su número real)
+  useRealtime('conversation:removed', (r) => {
+    setList((cur) => cur.filter((x) => x.id !== r.id))
+    if (r.id === selectedId && r.into) nav(`/bandeja/${r.into}`, { replace: true })
+  })
   useRealtime('conversation:update', (c) => {
     if (c.company_id !== companyId) return
     setList((cur) => {
@@ -227,7 +232,21 @@ function SidePanel({ data, meta, patch, reload, onClose }) {
   const addNote = async () => { if (!note.trim()) return; await api(`/conversations/${c.id}/notes`, { method: 'POST', body: { body: note } }); setNote(''); reload() }
   const addTask = async () => { if (!task.trim()) return; await api(`/conversations/${c.id}/tasks`, { method: 'POST', body: { title: task, due_at: new Date(Date.now() + 86400000).toISOString() } }); setTask(''); reload() }
   const toggleTask = async (t) => { await api(`/conversations/tasks/${t.id}`, { method: 'PATCH', body: { done: !t.done } }); reload() }
-  const saveContact = async (p) => { await api(`/contacts/${contact.id}`, { method: 'PATCH', body: { ...contact, ...p } }); reload() }
+  const saveContact = async (p) => { try { await api(`/contacts/${contact.id}`, { method: 'PATCH', body: { ...contact, ...p } }); reload(); return true } catch (e) { toast(e.message, 'error'); return false } }
+  const hidden = isHiddenPhone(contact.phone, contact.wa_jid)
+  const [finding, setFinding] = useState(false)
+  const findPhone = async () => {
+    setFinding(true)
+    try {
+      const r = await api(`/contacts/${contact.id}/find-phone`, { method: 'POST' })
+      if (r.found) { toast(`Número encontrado: +${r.contact.phone}`, 'success'); reload() } else toast('WhatsApp aún no revela el número de esta persona. Puedes pedírselo y escribirlo aquí.', 'warn')
+    } catch (e) { toast(e.message, 'error') } finally { setFinding(false) }
+  }
+  const savePhone = async (value) => {
+    const digits = value.replace(/\D/g, '')
+    if (!digits || digits === contact.phone) return
+    if (await saveContact({ phone: digits })) toast('Teléfono guardado', 'success')
+  }
 
   return (
     <aside className="side">
@@ -237,6 +256,15 @@ function SidePanel({ data, meta, patch, reload, onClose }) {
         <input className="input" style={{ textAlign: 'center', fontWeight: 600 }} defaultValue={contact.name || ''} onBlur={(e) => e.target.value !== contact.name && saveContact({ name: e.target.value })} />
         <div className="small text-2">{phoneLabel(contact.phone, contact.wa_jid)}{contact.city ? ` · ${contact.city}` : ''}</div>
         <div className="row" style={{ justifyContent: 'center' }}><span className="chip">{SOURCE_LABEL[contact.source] || contact.source}</span>{contact.campaign && <span className="chip">{contact.campaign}</span>}</div>
+      </div>
+      <div className="sec">
+        <h3><Icon name="phone" size={13} /> Teléfono</h3>
+        <div className="row">
+          <input key={contact.phone} className="input" inputMode="tel" placeholder={hidden ? 'Escribe el número, ej. 573001234567' : ''} defaultValue={hidden ? '' : `+${contact.phone}`}
+            onBlur={(e) => savePhone(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && e.target.blur()} />
+          {hidden && <button className="btn btn-sm" disabled={finding} onClick={findPhone}>{finding ? 'Buscando…' : 'Buscar'}</button>}
+        </div>
+        {hidden && <div className="small muted" style={{ marginTop: 6 }}>WhatsApp ocultó el número de esta persona. El CRM lo busca solo cada 10 minutos; si no aparece, pídeselo y escríbelo aquí. Los mensajes se siguen enviando normal.</div>}
       </div>
       <div className="sec">
         <h3><Icon name="clock" size={13} /> Tiempos</h3>

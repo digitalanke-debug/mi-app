@@ -20,6 +20,7 @@ import { broadcastsRouter } from './routes/broadcasts.js'
 import { broadcastTick } from './services/broadcasts.js'
 import { checkInactivity } from './services/automations.js'
 import { ensureWebhook, ensureSettings, syncEvolutionStatus, cleanOrphanInstances } from './services/whatsapp/evolutionProvider.js'
+import { resolveHiddenPhones } from './services/contactIdentity.js'
 import { startDemoSimulator } from './services/demoSimulator.js'
 
 const app = express()
@@ -56,8 +57,8 @@ if (fs.existsSync(dist)) {
 }
 
 app.use((err, req, res, next) => {
-  console.error(err)
-  res.status(500).json({ error: err.message || 'Error interno' })
+  if (!err.status || err.status >= 500) console.error(err)
+  res.status(err.status || 500).json({ error: err.message || 'Error interno' })
 })
 
 const server = http.createServer(app)
@@ -84,6 +85,10 @@ if (config.whatsappProvider === 'evolution') {
   setInterval(async () => {
     try { for (const inst of await evoInstances()) await syncEvolutionStatus(inst) } catch (e) { console.warn('sync WhatsApp:', e.message) }
   }, 15_000)
+  // Números ocultos por WhatsApp (@lid): busca el teléfono real cada 10 min
+  const lidSweep = () => resolveHiddenPhones().then((r) => r.found && console.log(`Números reales encontrados: ${r.found} de ${r.pending}`)).catch((e) => console.warn('números ocultos:', e.message))
+  setTimeout(lidSweep, 60_000)
+  setInterval(lidSweep, 10 * 60_000)
 }
 if (config.whatsappProvider === 'demo' && config.demoAutoLeads) startDemoSimulator({ everyMs: 90_000 })
 

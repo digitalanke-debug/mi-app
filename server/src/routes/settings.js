@@ -5,6 +5,7 @@ import { db as knex } from '../db/knex.js'
 
 const stageCompany = async (row) => (await knex('pipelines').where({ id: row.pipeline_id }).first())?.company_id
 import { aiAvailable } from '../services/ai.js'
+import { setContactPhone, resolveHiddenPhone, hasHiddenPhone } from '../services/contactIdentity.js'
 
 export const settingsRouter = Router()
 
@@ -18,9 +19,18 @@ settingsRouter.get('/contacts', requireCompany, async (req, res) => {
   res.json(contacts.map((c) => ({ ...c, conversations: convs.filter((v) => v.contact_id === c.id) })))
 })
 settingsRouter.patch('/contacts/:id', ownsRow('contacts'), async (req, res) => {
-  const { name, email, document, city, source, campaign, notes } = req.body
+  const { name, email, document, city, source, campaign, notes, phone } = req.body
   await db('contacts').where({ id: req.params.id }).update({ name, email, document, city, source, campaign, notes })
-  res.json(await db('contacts').where({ id: req.params.id }).first())
+  let contact = await db('contacts').where({ id: req.params.id }).first()
+  // Teléfono escrito a mano (p. ej. cuando WhatsApp lo ocultó). Si ya existía ese número, se unen los contactos.
+  if (phone !== undefined && String(phone).replace(/\D/g, '') !== contact.phone) contact = await setContactPhone(contact, phone, { userId: req.user.id })
+  res.json(contact)
+})
+// Pide a WhatsApp (Evolution) el número real de un contacto con número oculto
+settingsRouter.post('/contacts/:id/find-phone', ownsRow('contacts'), async (req, res) => {
+  const contact = await db('contacts').where({ id: req.params.id }).first()
+  const updated = await resolveHiddenPhone(contact)
+  res.json({ found: !hasHiddenPhone(updated), contact: updated })
 })
 settingsRouter.delete('/contacts/:id', requireAdmin, ownsRow('contacts'), async (req, res) => {
   // Derecho de supresión (habeas data): elimina contacto, conversaciones y mensajes

@@ -17,7 +17,7 @@ import { settingsRouter } from './routes/settings.js'
 import { dashboardRouter } from './routes/dashboard.js'
 import { marketingRouter } from './routes/marketing.js'
 import { checkInactivity } from './services/automations.js'
-import { ensureWebhook, syncEvolutionStatus } from './services/whatsapp/evolutionProvider.js'
+import { ensureWebhook, syncEvolutionStatus, cleanOrphanInstances } from './services/whatsapp/evolutionProvider.js'
 import { startDemoSimulator } from './services/demoSimulator.js'
 
 const app = express()
@@ -71,9 +71,11 @@ setInterval(() => checkInactivity().catch((e) => console.error('inactivity:', e.
 if (config.whatsappProvider === 'evolution') {
   const evoInstances = () => db('whatsapp_instances').where({ provider: 'evolution' })
   setTimeout(async () => {
-    for (const inst of await evoInstances()) {
+    const list = await evoInstances()
+    for (const inst of list) {
       try { await ensureWebhook(inst); await syncEvolutionStatus(inst) } catch (e) { console.warn(`webhook ${inst.instance_key}:`, e.message) }
     }
+    try { await cleanOrphanInstances(list.map((i) => i.instance_key)) } catch (e) { console.warn('huérfanas:', e.message) }
   }, 5000)
   setInterval(async () => {
     try { for (const inst of await evoInstances()) await syncEvolutionStatus(inst) } catch (e) { console.warn('sync WhatsApp:', e.message) }

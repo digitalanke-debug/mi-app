@@ -34,6 +34,17 @@ export async function ensureWebhook(inst) {
  * Respaldo del webhook: consulta a Evolution el estado real del número y lo sincroniza en el CRM.
  * Devuelve true si cambió algo.
  */
+/** Borra de Evolution las instancias creadas por el CRM que ya no existen en la base de datos */
+export async function cleanOrphanInstances(knownKeys) {
+  const list = await api('/instance/fetchInstances')
+  for (const i of Array.isArray(list) ? list : []) {
+    const name = i.name || i.instance?.instanceName
+    if (name && name.startsWith('evolution-') && !knownKeys.includes(name)) {
+      try { await api(`/instance/delete/${name}`, { method: 'DELETE' }); console.log('Instancia huérfana eliminada de Evolution:', name) } catch (e) { console.warn('huérfana', name, e.message) }
+    }
+  }
+}
+
 export async function syncEvolutionStatus(inst) {
   let state
   try { state = (await api(`/instance/connectionState/${inst.instance_key}`))?.instance?.state } catch { return false }
@@ -105,6 +116,12 @@ export const evolutionProvider = {
   async disconnect(inst) {
     try { await api(`/instance/logout/${inst.instance_key}`, { method: 'DELETE' }) } catch (e) { console.warn(e.message) }
     await updateInstance(inst.id, { status: 'disconnected', qr_code: null, connected_at: null })
+  },
+
+  /** Elimina el número de Evolution (cierra sesión y borra la instancia) */
+  async remove(inst) {
+    try { await api(`/instance/logout/${inst.instance_key}`, { method: 'DELETE' }) } catch {}
+    try { await api(`/instance/delete/${inst.instance_key}`, { method: 'DELETE' }) } catch (e) { console.warn('delete instance:', e.message) }
   },
 
   async status(inst) {

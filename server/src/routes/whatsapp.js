@@ -91,7 +91,11 @@ whatsappRouter.post('/instances/:id/disconnect', requireAuth, async (req, res) =
 
 whatsappRouter.delete('/instances/:id', requireAuth, requireAdmin, async (req, res) => {
   const inst = await db('whatsapp_instances').where({ id: req.params.id }).first()
-  if (inst) { try { await providerFor(inst).disconnect(inst) } catch {} ; await db('whatsapp_instances').where({ id: inst.id }).del() }
+  if (inst) {
+    const prov = providerFor(inst)
+    try { if (prov.remove) await prov.remove(inst); else await prov.disconnect(inst) } catch {}
+    await db('whatsapp_instances').where({ id: inst.id }).del()
+  }
   res.json({ ok: true })
 })
 

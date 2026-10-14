@@ -46,9 +46,10 @@ whatsappRouter.get('/instances/:id/templates', requireAuth, async (req, res) => 
   try { res.json(await metaProvider.listTemplates(inst)) } catch (e) { res.status(400).json({ error: e.message }) }
 })
 
-whatsappRouter.post('/instances', requireAuth, requireCompany, requireAdmin, async (req, res) => {
+whatsappRouter.post('/instances', requireAuth, requireCompany, async (req, res) => {
   const { name, phone, provider } = req.body
   const prov = provider || config.whatsappProvider
+  if (prov === 'meta' && req.user.role !== 'admin') return res.status(403).json({ error: 'Solo administradores pueden conectar números de la API oficial' })
   let key = `${prov}-${req.companyId}-${Date.now().toString(36)}`
   let cfg = null
   if (prov === 'meta') {
@@ -69,13 +70,13 @@ whatsappRouter.post('/instances', requireAuth, requireCompany, requireAdmin, asy
 
 whatsappRouter.post('/instances/:id/connect', requireAuth, async (req, res) => {
   const inst = await db('whatsapp_instances').where({ id: req.params.id }).first()
-  if (!inst) return res.status(404).json({ error: 'No existe' })
+  if (!inst || !(await canAccessCompany(req.user, inst.company_id))) return res.status(404).json({ error: 'No existe' })
   try { res.json(await providerFor(inst).connect(inst)) } catch (e) { res.status(502).json({ error: e.message }) }
 })
 
 whatsappRouter.post('/instances/:id/disconnect', requireAuth, async (req, res) => {
   const inst = await db('whatsapp_instances').where({ id: req.params.id }).first()
-  if (!inst) return res.status(404).json({ error: 'No existe' })
+  if (!inst || !(await canAccessCompany(req.user, inst.company_id))) return res.status(404).json({ error: 'No existe' })
   await providerFor(inst).disconnect(inst)
   res.json({ ok: true })
 })

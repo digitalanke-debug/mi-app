@@ -68,9 +68,9 @@ export default function WhatsApp() {
     <div className="page">
       <div className="page-head">
         <div><h1>WhatsApp Business · {company?.name}</h1><div className="sub">Conecta cada número por QR desde la app WhatsApp Business, o con la API oficial de Meta.</div></div>
-        <div className="actions">{user.role === 'admin' && <>
-          <button className="btn" onClick={() => openMeta(null)}><Icon name="link" size={15} /> Número de la API oficial</button>
-          <button className="btn btn-primary" onClick={() => setCreating(true)}><Icon name="qr" size={15} /> Conectar número por QR</button></>}</div>
+        <div className="actions">
+          {user.role === 'admin' && <button className="btn" onClick={() => openMeta(null)}><Icon name="link" size={15} /> Número de la API oficial</button>}
+          <button className="btn btn-primary" onClick={() => setCreating(true)}><Icon name="qr" size={15} /> Conectar número por QR</button></div>
       </div>
       <div className="alert info"><Icon name="info" size={16} /><div>Dos formas de conectar: <b>por QR</b> (app WhatsApp Business del celular, sin costo por mensaje) o <b>API oficial de Meta</b> (número registrado en Meta, sin celular, plantillas aprobadas y cobro por conversación iniciada por la empresa).</div></div>
       {list.map((i) => (

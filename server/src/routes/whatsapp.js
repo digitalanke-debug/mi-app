@@ -8,6 +8,7 @@ import { updateMessageStatus } from '../services/conversations.js'
 import { canAccessCompany } from '../auth.js'
 import { evolutionProvider, evolutionDiag } from '../services/whatsapp/evolutionProvider.js'
 import fs from 'node:fs'
+import { importEvolutionHistory } from '../services/historyImport.js'
 import { handleInbound } from '../services/inbound.js'
 import { simulateNewLead, simulateReply, startDemoSimulator, stopDemoSimulator, simulatorRunning } from '../services/demoSimulator.js'
 
@@ -15,6 +16,15 @@ export const whatsappRouter = Router()
 
 whatsappRouter.get('/instances', requireAuth, requireCompany, async (req, res) => {
   res.json((await db('whatsapp_instances').where({ company_id: req.companyId }).orderBy('id')).map(publicInstance))
+})
+
+/** Importa el historial de chats que WhatsApp envió al vincular el número (solo admin) */
+whatsappRouter.post('/instances/:id/import-history', requireAuth, requireAdmin, async (req, res) => {
+  const inst = await db('whatsapp_instances').where({ id: req.params.id }).first()
+  if (!inst) return res.status(404).json({ error: 'No existe' })
+  if (inst.provider !== 'evolution') return res.status(400).json({ error: 'La importación de historial aplica a números conectados por QR' })
+  try { res.json(await importEvolutionHistory(inst, { days: Number(req.body?.days) || 365 })) }
+  catch (e) { console.error('Importar historial:', e); res.status(500).json({ error: e.message }) }
 })
 
 /** Diagnóstico de WhatsApp (solo admin): Evolution, instancias y registros recientes */

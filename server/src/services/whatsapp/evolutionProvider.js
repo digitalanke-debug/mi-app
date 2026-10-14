@@ -25,6 +25,41 @@ const EVENTS = ['QRCODE_UPDATED', 'CONNECTION_UPDATE', 'MESSAGES_UPSERT', 'SEND_
 // Evolution v2 descarta el webhook si no lleva enabled: true
 const webhookConfig = (inst) => ({ enabled: true, url: `${config.evolution.webhookBase}/api/whatsapp/webhooks/evolution/${inst.instance_key}`, byEvents: false, base64: true, events: EVENTS })
 
+// Ignora grupos y pide a WhatsApp el historial completo al vincular (para poder importarlo)
+const INSTANCE_SETTINGS = { rejectCall: false, msgCall: '', groupsIgnore: true, alwaysOnline: false, readMessages: false, readStatus: false, syncFullHistory: true }
+
+export async function ensureSettings(inst) {
+  return api(`/settings/set/${inst.instance_key}`, { method: 'POST', body: INSTANCE_SETTINGS })
+}
+
+/** Texto, tipo y nombre de archivo de un mensaje de Baileys/Evolution */
+export function describeEvolutionMessage(m) {
+  const msg = m.message || {}
+  const inner = msg.ephemeralMessage?.message || msg.viewOnceMessageV2?.message || msg.documentWithCaptionMessage?.message || msg
+  const body = inner.conversation || inner.extendedTextMessage?.text || inner.imageMessage?.caption || inner.videoMessage?.caption || inner.documentMessage?.caption || ''
+  const type = inner.imageMessage || inner.stickerMessage ? 'image' : inner.audioMessage ? 'audio' : inner.videoMessage ? 'video' : inner.documentMessage ? 'document' : 'text'
+  const label = { image: '[imagen]', audio: '[audio]', video: '[video]', document: `[documento${inner.documentMessage?.fileName ? `: ${inner.documentMessage.fileName}` : ''}]` }[type]
+  return { body: body || label || (inner.locationMessage ? '[ubicación]' : inner.contactMessage ? '[contacto]' : ''), type, ad: inner.extendedTextMessage?.contextInfo?.externalAdReply || null }
+}
+
+/** Número de teléfono real de un mensaje (WhatsApp ahora usa identificadores @lid; el teléfono viene en remoteJidAlt) */
+export function phoneFromKey(key = {}) {
+  for (const j of [key.remoteJid, key.remoteJidAlt, key.senderPn]) if (j && j.endsWith('@s.whatsapp.net')) return j.split('@')[0]
+  return null
+}
+
+/** Recorre todos los mensajes guardados por Evolution para un número (más recientes primero) */
+export async function* evolutionMessages(inst, { pageSize = 250, maxMessages = 30000 } = {}) {
+  let page = 1, seen = 0
+  while (seen < maxMessages) {
+    const r = await api(`/chat/findMessages/${inst.instance_key}`, { method: 'POST', body: { where: {}, offset: pageSize, page } })
+    const recs = r?.messages?.records || []
+    for (const m of recs) { seen++; yield m }
+    if (!recs.length || page >= (r?.messages?.pages || 0)) break
+    page++
+  }
+}
+
 /** Activa (o repara) el webhook de un número en Evolution */
 export async function ensureWebhook(inst) {
   return api(`/webhook/set/${inst.instance_key}`, { method: 'POST', body: { webhook: webhookConfig(inst) } })
@@ -100,6 +135,7 @@ export const evolutionProvider = {
         integration: 'WHATSAPP-BAILEYS',
         qrcode: false,
         webhook: webhookConfig(inst),
+        ...INSTANCE_SETTINGS,
       },
     })
     return inst
@@ -107,6 +143,7 @@ export const evolutionProvider = {
 
   async connect(inst) {
     try { await ensureWebhook(inst) } catch (e) { console.warn('webhook/set:', e.message) }
+    try { await ensureSettings(inst) } catch (e) { console.warn('settings/set:', e.message) }
     const data = await api(`/instance/connect/${inst.instance_key}`)
     const qr = data?.base64 || null
     await updateInstance(inst.id, { status: qr ? 'qr' : 'connecting', qr_code: qr })
@@ -177,13 +214,15 @@ export const evolutionProvider = {
       const items = Array.isArray(data) ? data : [data]
       return items.filter((m) => m?.key && !m.key.fromMe && !m.key.remoteJid?.endsWith('@g.us')).map((m) => {
         const msg = m.message || {}
-        const body = msg.conversation || msg.extendedTextMessage?.text || msg.imageMessage?.caption || msg.documentMessage?.caption || ''
+        const desc = describeEvolutionMessage(m)
+        // En medios el texto es el pie de foto (vacío si no hay); la etiqueta [imagen] solo se usa en el historial importado
+        const body = desc.type === 'text' ? desc.body : (msg.imageMessage?.caption || msg.videoMessage?.caption || msg.documentMessage?.caption || '')
         const mediaMsg = msg.imageMessage || msg.audioMessage || msg.documentMessage || msg.videoMessage || msg.stickerMessage || null
         const type = msg.imageMessage ? 'image' : msg.audioMessage ? 'audio' : msg.documentMessage ? 'document' : msg.videoMessage ? 'video' : msg.stickerMessage ? 'image' : 'text'
         // Anuncios "clic a WhatsApp" de Meta llegan con contextInfo.externalAdReply
         const ad = msg.extendedTextMessage?.contextInfo?.externalAdReply
         return {
-          phone: m.key.remoteJid.split('@')[0],
+          phone: phoneFromKey(m.key) || m.key.remoteJid.split('@')[0],
           name: m.pushName || null,
           body: body || '',
           type,

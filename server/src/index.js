@@ -17,7 +17,7 @@ import { settingsRouter } from './routes/settings.js'
 import { dashboardRouter } from './routes/dashboard.js'
 import { marketingRouter } from './routes/marketing.js'
 import { checkInactivity } from './services/automations.js'
-import { ensureWebhook, syncEvolutionStatus, cleanOrphanInstances } from './services/whatsapp/evolutionProvider.js'
+import { ensureWebhook, ensureSettings, syncEvolutionStatus, cleanOrphanInstances } from './services/whatsapp/evolutionProvider.js'
 import { startDemoSimulator } from './services/demoSimulator.js'
 
 const app = express()
@@ -73,7 +73,7 @@ if (config.whatsappProvider === 'evolution') {
   setTimeout(async () => {
     const list = await evoInstances()
     for (const inst of list) {
-      try { await ensureWebhook(inst); await syncEvolutionStatus(inst) } catch (e) { console.warn(`webhook ${inst.instance_key}:`, e.message) }
+      try { await ensureWebhook(inst); await ensureSettings(inst); await syncEvolutionStatus(inst) } catch (e) { console.warn(`webhook ${inst.instance_key}:`, e.message) }
     }
     try { await cleanOrphanInstances(list.map((i) => i.instance_key)) } catch (e) { console.warn('huérfanas:', e.message) }
   }, 5000)

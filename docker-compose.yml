@@ -42,6 +42,14 @@ services:
       QRCODE_LIMIT: "30"
       LANGUAGE: es
       DEL_INSTANCE: "false"
+      # Guardar historial y chats para poder importarlos al CRM
+      DATABASE_SAVE_DATA_INSTANCE: "true"
+      DATABASE_SAVE_DATA_NEW_MESSAGE: "true"
+      DATABASE_SAVE_MESSAGE_UPDATE: "true"
+      DATABASE_SAVE_DATA_CONTACTS: "true"
+      DATABASE_SAVE_DATA_CHATS: "true"
+      DATABASE_SAVE_DATA_HISTORIC: "true"
+      DATABASE_SAVE_DATA_LABELS: "false"
       CONFIG_SESSION_PHONE_CLIENT: CRM
       CONFIG_SESSION_PHONE_NAME: Chrome
     volumes:

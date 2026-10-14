@@ -37,6 +37,16 @@ export default function WhatsApp() {
   const verifyMeta = async (i) => { try { const r = await api(`/whatsapp/instances/${i.id}/connect`, { method: 'POST' }); toast(`Conexión verificada${r.quality ? ` · calidad ${r.quality}` : ''}`, 'success'); load() } catch (e) { toast(e.message, 'error'); load() } }
   const copy = (t) => { navigator.clipboard?.writeText(t); toast('Copiado', 'success') }
   const [qrImg, setQrImg] = useState(null)
+  const [importing, setImporting] = useState(null)
+  const importHistory = async (i) => {
+    if (!confirm(`¿Importar las conversaciones anteriores de ${i.name}? Se traen los chats del último año que WhatsApp envió al vincular el número. No se envía ningún mensaje a los clientes.`)) return
+    setImporting(i.id)
+    try {
+      const r = await api(`/whatsapp/instances/${i.id}/import-history`, { method: 'POST', body: { days: 365 } })
+      if (!r.scanned) toast('No hay historial guardado para este número. Desconéctalo y vuelve a escanear el QR para que WhatsApp lo envíe, espera 2 minutos e importa de nuevo.', 'warn')
+      else toast(`Historial importado: ${r.conversationsCreated} conversaciones nuevas, ${r.messagesImported} mensajes`, 'success')
+    } catch (e) { toast(e.message, 'error') } finally { setImporting(null) }
+  }
   const connect = async (i) => {
     setQrFor(i.id); setQrImg(null)
     try { const r = await api(`/whatsapp/instances/${i.id}/connect`, { method: 'POST' }); if (r?.qr) setQrImg(r.qr); load() }
@@ -86,6 +96,7 @@ export default function WhatsApp() {
               {user.role === 'admin' && <button className="btn btn-sm" onClick={() => openMeta(i)}><Icon name="edit" size={13} /> Credenciales</button>}
             </>) : i.status === 'connected' ? (<>
               {i.provider === 'demo' && <button className="btn btn-sm" onClick={() => newLead(i)}><Icon name="flask" size={14} /> Simular lead nuevo</button>}
+              {i.provider === 'evolution' && user.role === 'admin' && <button className="btn btn-sm" disabled={importing === i.id} onClick={() => importHistory(i)}><Icon name="download" size={14} /> {importing === i.id ? 'Importando…' : 'Importar historial'}</button>}
               <button className="btn btn-sm" onClick={() => disconnect(i)}>Desconectar</button>
             </>) : <button className="btn btn-wa btn-sm" onClick={() => connect(i)}><Icon name="qr" size={14} /> Conectar con QR</button>}
             {user.role === 'admin' && <button className="btn btn-sm btn-danger" onClick={() => remove(i)}>Eliminar</button>}

@@ -88,9 +88,9 @@ export function buildSeed() {
   return {
     version: 1,
     settings: {
-      firmName: 'SIGO Abogados',
+      firmName: 'S&Go Abogados',
       reminderTemplate:
-        'Hola {nombre}, le escribimos de SIGO Abogados. Le recordamos que la cuenta de cobro {numero} por {valor} tiene fecha de vencimiento el {fecha}. Quedamos atentos a su pago. ¡Gracias!',
+        'Hola {nombre}, le escribimos de S&Go Abogados. Le recordamos que la cuenta de cobro {numero} por {valor} tiene fecha de vencimiento el {fecha}. Quedamos atentos a su pago. ¡Gracias!',
       countryCode: '57',
     },
     clients,
@@ -107,9 +107,9 @@ export function emptyState() {
   return {
     version: 1,
     settings: {
-      firmName: 'SIGO Abogados',
+      firmName: 'S&Go Abogados',
       reminderTemplate:
-        'Hola {nombre}, le escribimos de SIGO Abogados. Le recordamos que la cuenta de cobro {numero} por {valor} tiene fecha de vencimiento el {fecha}. Quedamos atentos a su pago. ¡Gracias!',
+        'Hola {nombre}, le escribimos de S&Go Abogados. Le recordamos que la cuenta de cobro {numero} por {valor} tiene fecha de vencimiento el {fecha}. Quedamos atentos a su pago. ¡Gracias!',
       countryCode: '57',
     },
     clients: [],

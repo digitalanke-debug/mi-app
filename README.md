@@ -1,4 +1,4 @@
-# SIGO Abogados · Administración
+# S&Go Abogados · Administración
 
 Aplicación web para la gestión administrativa del bufete: facturación a clientes,
 cuentas por pagar con prioridad automática, control de caja y recordatorios de cobro.

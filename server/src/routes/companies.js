@@ -2,6 +2,7 @@ import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import { db } from '../db/knex.js'
 import { requireAdmin, requireCompany } from '../auth.js'
+import { applyCompanyDefaults } from '../services/companyDefaults.js'
 
 export const companiesRouter = Router()
 
@@ -12,12 +13,12 @@ companiesRouter.post('/', requireAdmin, async (req, res) => {
   const [row] = await db('companies').insert({ name, slug: s, color: color || '#2563eb', sector, description }).returning('id')
   const id = row.id ?? row
   await db('company_users').insert({ company_id: id, user_id: req.user.id }).onConflict().ignore()
-  const [p] = await db('pipelines').insert({ company_id: id, name: 'Ventas', is_default: true }).returning('id')
-  const pid = p.id ?? p
-  const stages = ['Nuevo', 'Contactado', 'Calificado', 'Propuesta', 'Ganado', 'Perdido']
-  await db('pipeline_stages').insert(stages.map((n, i) => ({ pipeline_id: pid, name: n, position: i, is_won: n === 'Ganado', is_lost: n === 'Perdido' })))
-  await db('ai_settings').insert({ company_id: id, agent_name: `Asistente ${name}` })
-  res.json(await db('companies').where({ id }).first())
+  const company = await db('companies').where({ id }).first()
+  await applyCompanyDefaults(company)
+  // Acceso opcional para otros usuarios (por ejemplo, los asesores que atienden todas las empresas)
+  const extra = (req.body.user_ids || []).map(Number).filter(Boolean)
+  if (extra.length) await db('company_users').insert(extra.map((u) => ({ company_id: id, user_id: u }))).onConflict().ignore()
+  res.json(company)
 })
 
 companiesRouter.patch('/:companyId', requireCompany, requireAdmin, async (req, res) => {

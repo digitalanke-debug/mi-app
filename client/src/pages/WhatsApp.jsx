@@ -96,9 +96,9 @@ export default function WhatsApp() {
               {user.role === 'admin' && <button className="btn btn-sm" onClick={() => openMeta(i)}><Icon name="edit" size={13} /> Credenciales</button>}
             </>) : i.status === 'connected' ? (<>
               {i.provider === 'demo' && <button className="btn btn-sm" onClick={() => newLead(i)}><Icon name="flask" size={14} /> Simular lead nuevo</button>}
-              {i.provider === 'evolution' && user.role === 'admin' && <button className="btn btn-sm" disabled={importing === i.id} onClick={() => importHistory(i)}><Icon name="download" size={14} /> {importing === i.id ? 'Importando…' : 'Importar historial'}</button>}
               <button className="btn btn-sm" onClick={() => disconnect(i)}>Desconectar</button>
             </>) : <button className="btn btn-wa btn-sm" onClick={() => connect(i)}><Icon name="qr" size={14} /> Conectar con QR</button>}
+            {i.provider === 'evolution' && <button className="btn btn-sm" disabled={importing === i.id} onClick={() => importHistory(i)}><Icon name="download" size={14} /> {importing === i.id ? 'Importando…' : 'Importar historial'}</button>}
             {user.role === 'admin' && <button className="btn btn-sm btn-danger" onClick={() => remove(i)}>Eliminar</button>}
           </div>
         </div>

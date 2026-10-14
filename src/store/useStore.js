@@ -7,3 +7,10 @@ export function useStore() {
   if (!ctx) throw new Error('useStore debe usarse dentro de AppStoreProvider')
   return ctx
 }
+
+/**
+ * Modo de almacenamiento:
+ *  - 'local': todo en el navegador (localStorage). Es el modo por defecto en desarrollo.
+ *  - 'api':   el backend en server/ guarda el estado en PostgreSQL y aplica las acciones.
+ */
+export const STORAGE_MODE = import.meta.env.VITE_STORAGE || (import.meta.env.DEV ? 'local' : 'api')

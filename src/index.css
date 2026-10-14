@@ -241,3 +241,16 @@ textarea.input { resize: vertical; }
   .table { display: block; overflow-x: auto; }
   .aging { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ---------- Sesión / login / avisos ---------- */
+.sidebar-user { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; color: #c7d2e0; gap: 8px; }
+.btn-link-light { all: unset; cursor: pointer; font-size: 13px; color: #fff; text-decoration: underline; }
+.login { min-height: 100vh; display: grid; place-items: center; padding: 16px; background: var(--bg); }
+.login-card { width: 100%; max-width: 380px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 14px; }
+.brand-dark { padding: 0 0 6px; color: var(--text); }
+.brand-dark .brand-sub { color: var(--muted); }
+.banner { background: var(--warn-bg); color: var(--warn); padding: 10px 30px; font-size: 13.5px; border-bottom: 1px solid #f1dfb0; }
+.toast { position: fixed; right: 18px; bottom: 18px; padding: 10px 14px; border-radius: 8px; font-size: 13.5px; box-shadow: 0 6px 24px rgba(0,0,0,0.18); z-index: 60; cursor: default; }
+.toast-info { background: var(--primary); color: #fff; }
+.toast-danger { background: var(--danger); color: #fff; }
+@media (max-width: 820px) { .banner { padding: 10px 16px; } }

@@ -6,6 +6,8 @@ import Clientes from './pages/Clientes.jsx'
 import CuentasPorPagar from './pages/CuentasPorPagar.jsx'
 import Caja from './pages/Caja.jsx'
 import Recordatorios from './pages/Recordatorios.jsx'
+import Usuarios from './pages/Usuarios.jsx'
+import Login from './pages/Login.jsx'
 import { cop } from './lib/format.js'
 import { computePriority } from './lib/priority.js'
 import { invoiceStatus } from './lib/invoices.js'
@@ -16,6 +18,7 @@ const NAV = [
   { key: 'pagar', label: 'Cuentas por pagar' },
   { key: 'caja', label: 'Caja' },
   { key: 'recordatorios', label: 'Recordatorios' },
+  { key: 'usuarios', label: 'Usuarios y bitácora', adminApiOnly: true },
 ]
 
 function readHash() {
@@ -24,7 +27,7 @@ function readHash() {
 }
 
 function Shell() {
-  const { state, balance } = useStore()
+  const { state, balance, user, mode, canEdit, saving, error, clearError, logout } = useStore()
   const [page, setPage] = useState(readHash)
   const [menuOpen, setMenuOpen] = useState(false)
 
@@ -34,12 +37,19 @@ function Shell() {
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
 
+  useEffect(() => {
+    if (!error) return
+    const t = setTimeout(clearError, 6000)
+    return () => clearTimeout(t)
+  }, [error, clearError])
+
   function go(key) {
     window.history.pushState(null, '', `#/${key}`)
     setPage(key)
     setMenuOpen(false)
   }
 
+  const nav = NAV.filter((n) => !n.adminApiOnly || (mode === 'api' && user?.role === 'admin'))
   const altas = state.expenses.filter((e) => e.status !== 'pagado' && computePriority(e) === 'alta').length
   const vencidas = state.invoices.filter((i) => invoiceStatus(i) === 'vencida').length
   const badges = { pagar: altas, recordatorios: vencidas }
@@ -55,7 +65,7 @@ function Shell() {
           </div>
         </div>
         <nav>
-          {NAV.map((n) => (
+          {nav.map((n) => (
             <button key={n.key} type="button" className={page === n.key ? 'active' : ''} onClick={() => go(n.key)}>
               <span>{n.label}</span>
               {badges[n.key] > 0 && <span className="nav-badge">{badges[n.key]}</span>}
@@ -65,6 +75,10 @@ function Shell() {
         <div className="sidebar-foot">
           <div className="muted small">Saldo en cuenta</div>
           <div className={`sidebar-balance ${balance < 0 ? 'text-danger' : ''}`}>{cop(balance)}</div>
+          <div className="sidebar-user">
+            <span className="small">{user?.name}{!canEdit && ' · solo lectura'}</span>
+            {mode === 'api' && <button type="button" className="btn-link-light" onClick={logout}>Salir</button>}
+          </div>
         </div>
       </aside>
       <div className="topbar">
@@ -74,20 +88,34 @@ function Shell() {
       </div>
       {menuOpen && <div className="scrim" onClick={() => setMenuOpen(false)} />}
       <main className="content">
+        {!canEdit && <div className="banner">Tu usuario es de solo lectura: puedes consultar todo pero no registrar cambios.</div>}
         {page === 'panel' && <Dashboard go={go} />}
         {page === 'clientes' && <Clientes />}
         {page === 'pagar' && <CuentasPorPagar />}
         {page === 'caja' && <Caja />}
         {page === 'recordatorios' && <Recordatorios />}
+        {page === 'usuarios' && mode === 'api' && user?.role === 'admin' && <Usuarios />}
       </main>
+      {saving && <div className="toast toast-info">Guardando…</div>}
+      {error && <div className="toast toast-danger" onClick={clearError}>{error}</div>}
     </div>
   )
+}
+
+function Gate() {
+  const { mode, user, state, error } = useStore()
+  if (mode === 'api') {
+    if (user === undefined) return <div className="login"><div className="muted">{error || 'Cargando…'}</div></div>
+    if (user === null) return <Login />
+    if (!state) return <div className="login"><div className="muted">{error || 'Cargando datos…'}</div></div>
+  }
+  return <Shell />
 }
 
 export default function App() {
   return (
     <AppStoreProvider>
-      <Shell />
+      <Gate />
     </AppStoreProvider>
   )
 }

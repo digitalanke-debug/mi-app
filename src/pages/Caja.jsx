@@ -5,7 +5,7 @@ import { downloadCSV } from '../lib/csv.js'
 import { Modal, MoneyInput, Field, Empty, Confirm, Kpi } from '../components/ui.jsx'
 
 export default function Caja() {
-  const { state, dispatch, balance, resetToSeed, resetEmpty, exportJSON, importJSON } = useStore()
+  const { state, dispatch, balance, resetToSeed, resetEmpty, exportJSON, importJSON, mode } = useStore()
   const [movModal, setMovModal] = useState(null)
   const [balanceModal, setBalanceModal] = useState(false)
   const [confirm, setConfirm] = useState(null)
@@ -100,7 +100,7 @@ export default function Caja() {
 
         <hr />
         <h3>Datos</h3>
-        <p className="muted small">Los datos se guardan en este navegador. Haz respaldos periódicos hasta que conectemos la base de datos en la nube.</p>
+        <p className="muted small">{mode === 'api' ? 'Los datos viven en el servidor y se respaldan automáticamente cada noche. Aquí puedes descargar una copia adicional.' : 'Los datos se guardan en este navegador. Haz respaldos periódicos hasta que conectemos la base de datos en la nube.'}</p>
         <div className="row wrap">
           <button type="button" className="btn" onClick={exportJSON}>Descargar respaldo</button>
           <button type="button" className="btn" onClick={() => fileRef.current?.click()}>Restaurar respaldo</button>

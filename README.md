@@ -22,10 +22,19 @@ Abre la dirección que muestra la consola. Para generar la versión de producci�
 
 ## Dónde se guardan los datos
 
-Por ahora en el navegador (`localStorage`). Cada equipo ve sus propios datos.
-La capa de persistencia está aislada en `src/store/storage.js` para conectar una base
-de datos en la nube (Supabase) sin reescribir la aplicación. Desde **Caja → Configuración**
-se puede descargar y restaurar un respaldo en JSON.
+Dos modos, elegidos en `src/store/useStore.js`:
+
+- **Local** (por defecto al correr `npm run dev`): todo en el navegador. Útil para probar sin servidor.
+- **Servidor** (producción): el backend en `server/` guarda los datos en PostgreSQL, maneja usuarios con
+  contraseña y roles, y registra una bitácora de cambios. Para probarlo en desarrollo:
+  `DATABASE_URL=... JWT_SECRET=... ADMIN_EMAIL=... ADMIN_PASSWORD=... npm run server` y en otra terminal
+  `VITE_STORAGE=api npm run dev`.
+
+Desde **Caja → Configuración** se puede descargar y restaurar un respaldo en JSON en ambos modos.
+
+## Producción
+
+Ver [DEPLOY.md](DEPLOY.md): Docker Compose con PostgreSQL, respaldo nocturno y HTTPS automático, pensado para Hetzner Cloud.
 
 ## Regla de prioridad de pagos
 
@@ -38,13 +47,15 @@ La prioridad se puede forzar manualmente en cada cuenta. La regla vive en `src/l
 ```
 src/
   lib/        formato COP y fechas, prioridad, cálculos de facturas, CSV
-  store/      estado global (reducer), persistencia, datos de ejemplo
+  store/      estado global (reducer), persistencia local, cliente de la API, datos de ejemplo
   components/ componentes de interfaz reutilizables
-  pages/      Panel, Clientes, CuentasPorPagar, Caja, Recordatorios
+  pages/      Panel, Clientes, CuentasPorPagar, Caja, Recordatorios, Usuarios, Login
+server/       API en Node + Express: autenticación, usuarios, estado y bitácora en PostgreSQL
+deploy/       Caddyfile, respaldo, scripts de instalación y despliegue
 ```
 
 ## Siguientes fases
 
-1. Base de datos en la nube y usuarios con contraseña (Supabase).
+1. Importar los datos actuales desde Excel.
 2. Facturación electrónica DIAN a través de un proveedor tecnológico autorizado.
-3. Agente de IA conectado a WhatsApp Business que registre pagos, cree cuentas de cobro y envíe recordatorios usando las mismas acciones del reducer.
+3. Agente de IA conectado a WhatsApp Business que registre pagos, cree cuentas de cobro y envíe recordatorios usando las mismas acciones que ya expone el backend.

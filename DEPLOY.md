@@ -3,37 +3,27 @@
 La app corre con Docker Compose en un servidor Ubuntu. Tres contenedores: PostgreSQL (datos),
 la app (API + interfaz) y un respaldo nocturno. Opcionalmente Caddy para el HTTPS automático.
 
-## Opción A: servidor nuevo solo para esta app (recomendado)
+## Instalación
 
-1. En Hetzner Cloud crea un servidor: Ubuntu 24.04, tipo CPX22 o similar, ubicación Ashburn (la más cercana a Colombia). Agrega tu llave SSH.
-2. En el DNS del dominio crea un registro **A** `admin.sygoabogados.com` apuntando a la IP del servidor.
-3. Entra al servidor y ejecuta:
+Funciona igual en un servidor nuevo o en uno que ya tiene otras aplicaciones (por ejemplo el CRM).
+El instalador detecta si el sistema ya tiene **Caddy** atendiendo la web: si es así, le agrega el subdominio;
+si no, levanta su propio Caddy con HTTPS automático.
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/digitalanke-debug/mi-app/main/deploy/setup-server.sh -o setup-server.sh
-bash setup-server.sh https://github.com/digitalanke-debug/mi-app.git
-```
-
-   Esto instala Docker, abre solo los puertos 22, 80 y 443 en el firewall, clona el proyecto en `/opt/sigo-admin` y genera los secretos en `.env`.
-
-4. Edita `/opt/sigo-admin/.env`: pon `DOMAIN`, `ADMIN_EMAIL` y `ADMIN_PASSWORD`. Deja `USE_CADDY=true`.
-5. Arranca:
+1. En el DNS del dominio crea un registro **A** `admin.sygoabogados.com` apuntando a la IP del servidor.
+2. Entra al servidor como root (SSH o la consola web de Hetzner) y ejecuta:
 
 ```bash
-cd /opt/sigo-admin && bash deploy/deploy.sh
+curl -fsSL https://raw.githubusercontent.com/digitalanke-debug/mi-app/main/deploy/install.sh -o install.sh
+bash install.sh
 ```
 
-   En uno o dos minutos la app queda en `https://admin.sygoabogados.com` con certificado válido.
-   Entra con el correo y la contraseña del paso 4 y cámbiala desde **Usuarios y bitácora**.
+   Para instalar desde otra rama: `BRANCH=nombre-de-la-rama bash install.sh`.
 
-## Opción B: en el mismo servidor del CRM
+3. El instalador pregunta el dominio, el correo y la contraseña del primer administrador, genera los secretos,
+   instala Docker si falta, construye la app y la arranca. En dos o tres minutos queda en `https://admin.sygoabogados.com`.
 
-Si el servidor ya tiene un proxy (nginx, Traefik, Caddy o el propio CRM) escuchando en los puertos 80 y 443,
-no se puede levantar otro Caddy. En ese caso:
-
-1. Pasos 3 y 4 de la opción A, pero en `.env` pon `USE_CADDY=false` y, si el puerto 3000 ya está ocupado, cambia `APP_PORT`.
-2. `bash deploy/deploy.sh`. La app queda escuchando solo en `127.0.0.1:3000`.
-3. En el proxy existente agrega el subdominio `admin.sygoabogados.com` reenviando a `http://127.0.0.1:3000`. Ejemplo para nginx:
+Si el servidor tiene otro proxy que no sea Caddy (nginx, Traefik), el instalador deja la app en `127.0.0.1:3000`
+y hay que agregar el subdominio en ese proxy. Ejemplo para nginx:
 
 ```nginx
 server {
@@ -47,7 +37,7 @@ server {
 }
 ```
 
-   y genera el certificado con `certbot --nginx -d admin.sygoabogados.com`.
+Firewall: en Hetzner conviene crear un **Firewall** en el panel que permita solo los puertos 22, 80 y 443 y asignarlo al servidor.
 
 ## Actualizar la app
 
@@ -79,8 +69,8 @@ gunzip -c backups/sigo-AAAAMMDD-HHMMSS.sql.gz | docker compose exec -T db psql -
 | `USE_CADDY` | `true` para que Caddy maneje HTTPS; `false` si hay otro proxy |
 | `APP_PORT` | Puerto local donde escucha la app (por defecto 3000) |
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME` | Primer usuario administrador; solo se usan al crear la base de datos |
-| `JWT_SECRET` | Firma de las sesiones. Generado por `setup-server.sh` |
-| `POSTGRES_PASSWORD` | Contraseña de la base de datos. Generado por `setup-server.sh` |
+| `JWT_SECRET` | Firma de las sesiones. Generado por `install.sh` |
+| `POSTGRES_PASSWORD` | Contraseña de la base de datos. Generado por `install.sh` |
 
 ## Cómo funciona por dentro
 

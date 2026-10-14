@@ -16,6 +16,8 @@ import { conversationsRouter } from './routes/conversations.js'
 import { settingsRouter } from './routes/settings.js'
 import { dashboardRouter } from './routes/dashboard.js'
 import { marketingRouter } from './routes/marketing.js'
+import { broadcastsRouter } from './routes/broadcasts.js'
+import { broadcastTick } from './services/broadcasts.js'
 import { checkInactivity } from './services/automations.js'
 import { ensureWebhook, ensureSettings, syncEvolutionStatus, cleanOrphanInstances } from './services/whatsapp/evolutionProvider.js'
 import { startDemoSimulator } from './services/demoSimulator.js'
@@ -42,6 +44,7 @@ app.use('/api/companies', requireAuth, companiesRouter)
 app.use('/api/conversations', requireAuth, conversationsRouter)
 app.use('/api/dashboard', requireAuth, dashboardRouter)
 app.use('/api/marketing', requireAuth, marketingRouter)
+app.use('/api/broadcasts', requireAuth, broadcastsRouter)
 app.use('/api', requireAuth, settingsRouter)
 
 // En producción sirve el build del cliente desde el mismo proceso
@@ -65,6 +68,7 @@ if (config.seedOnEmpty) {
   const u = await db('users').count('id as n').first()
   if (!Number(u?.n)) { console.log('Base vacía: cargando datos demo…'); await import('./db/seed.js') }
 }
+setInterval(broadcastTick, 3000) // difusiones: un mensaje cada 20-45 s por difusión
 setInterval(() => checkInactivity().catch((e) => console.error('inactivity:', e.message)), 60_000)
 
 // WhatsApp por QR: al arrancar repara el webhook de cada número y cada 15 s sincroniza su estado real

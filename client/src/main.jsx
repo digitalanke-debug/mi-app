@@ -10,6 +10,7 @@ import Pipeline from './pages/Pipeline.jsx'
 import Contacts from './pages/Contacts.jsx'
 import WhatsApp from './pages/WhatsApp.jsx'
 import Automations from './pages/Automations.jsx'
+import Broadcasts from './pages/Broadcasts.jsx'
 import AiAgent from './pages/AiAgent.jsx'
 import Dashboard from './pages/Dashboard.jsx'
 import Team from './pages/Team.jsx'
@@ -29,6 +30,7 @@ function App() {
         <Route path="/contactos" element={<Contacts />} />
         <Route path="/whatsapp" element={<WhatsApp />} />
         <Route path="/automatizaciones" element={<Automations />} />
+        <Route path="/difusiones" element={<Broadcasts />} />
         <Route path="/agente-ia" element={<AiAgent />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/equipo" element={<Team />} />

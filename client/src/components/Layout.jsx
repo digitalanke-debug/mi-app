@@ -10,6 +10,7 @@ const NAV = [
   ['/contactos', 'users', 'Contactos'],
   ['/dashboard', 'chart', 'Dashboard'],
   ['/automatizaciones', 'zap', 'Automatizaciones'],
+  ['/difusiones', 'send', 'Difusiones'],
   ['/agente-ia', 'sparkles', 'Agente IA'],
   ['/whatsapp', 'wa', 'WhatsApp'],
   ['/equipo', 'team', 'Equipo'],

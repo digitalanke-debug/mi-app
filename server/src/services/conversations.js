@@ -33,7 +33,7 @@ export async function broadcastConversation(id) {
 /**
  * Envía un mensaje saliente (por asesor, bot o sistema) por la instancia de la conversación.
  */
-export async function sendOutbound(conversationId, { body, senderType = 'user', userId = null, type = 'text', media = null }) {
+export async function sendOutbound(conversationId, { body, senderType = 'user', userId = null, type = 'text', media = null, savedMedia = null }) {
   const conv = await db('conversations').where({ id: conversationId }).first()
   if (!conv) throw new Error('Conversación no existe')
   const contact = await db('contacts').where({ id: conv.contact_id }).first()
@@ -43,7 +43,8 @@ export async function sendOutbound(conversationId, { body, senderType = 'user', 
   let status = 'sent'
   let errorMsg = null
   let saved = null
-  if (media) { saved = saveMedia({ base64: media.base64, mime: media.mime, name: media.name }); type = saved.type }
+  if (savedMedia) { saved = savedMedia; type = saved.type } // archivo ya guardado (difusiones: un solo archivo para todos)
+  else if (media) { saved = saveMedia({ base64: media.base64, mime: media.mime, name: media.name }); type = saved.type }
   // Por QR se responde al identificador exacto de WhatsApp (necesario para contactos @lid)
   const target = inst?.provider === 'evolution' && contact.wa_jid ? contact.wa_jid : contact.phone
   if (inst && inst.status === 'connected') {

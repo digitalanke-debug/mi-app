@@ -6,7 +6,8 @@ import { providerFor, publicInstance } from '../services/whatsapp/index.js'
 import { metaProvider, parseMetaChange, validSignature, webhookVerifyToken, cfgOf } from '../services/whatsapp/metaProvider.js'
 import { updateMessageStatus } from '../services/conversations.js'
 import { canAccessCompany } from '../auth.js'
-import { evolutionProvider } from '../services/whatsapp/evolutionProvider.js'
+import { evolutionProvider, evolutionDiag } from '../services/whatsapp/evolutionProvider.js'
+import fs from 'node:fs'
 import { handleInbound } from '../services/inbound.js'
 import { simulateNewLead, simulateReply, startDemoSimulator, stopDemoSimulator, simulatorRunning } from '../services/demoSimulator.js'
 
@@ -14,6 +15,13 @@ export const whatsappRouter = Router()
 
 whatsappRouter.get('/instances', requireAuth, requireCompany, async (req, res) => {
   res.json((await db('whatsapp_instances').where({ company_id: req.companyId }).orderBy('id')).map(publicInstance))
+})
+
+/** Diagnóstico de WhatsApp (solo admin): Evolution, instancias y registros recientes */
+whatsappRouter.get('/diag', requireAuth, requireAdmin, async (req, res) => {
+  const out = { crm: await db('whatsapp_instances').select('id', 'company_id', 'name', 'provider', 'status', 'instance_key', 'connected_at', 'created_at').orderBy('id'), evolution: await evolutionDiag() }
+  try { out.evolution_log = fs.readFileSync('/diag/evolution.log', 'utf8').split('\n').slice(-Number(req.query.lines || 150)).join('\n') } catch { out.evolution_log = '(registro aún no disponible)' }
+  res.json(out)
 })
 
 /** Datos para configurar el webhook en Meta (URL y token de verificación) */

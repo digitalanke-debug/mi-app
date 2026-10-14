@@ -85,6 +85,7 @@ services:
       UPLOAD_DIR: /data/uploads
     volumes:
       - uploads:/data/uploads
+      - /var/log/crm-diag:/diag:ro
     ports:
       - "127.0.0.1:4000:4000"
 

@@ -28,6 +28,22 @@ async function updateInstance(id, patch) {
   return inst
 }
 
+/** Diagnóstico: versión de Evolution y estado detallado de todas sus instancias */
+export async function evolutionDiag() {
+  const out = {}
+  try { out.server = await api('/') } catch (e) { out.server_error = e.message }
+  try {
+    const list = await api('/instance/fetchInstances')
+    out.instances = (Array.isArray(list) ? list : []).map((i) => ({
+      name: i.name || i.instance?.instanceName, status: i.connectionStatus || i.instance?.status, number: i.number || i.ownerJid,
+      disconnectionReasonCode: i.disconnectionReasonCode, disconnectionAt: i.disconnectionAt,
+      disconnectionObject: typeof i.disconnectionObject === 'string' ? i.disconnectionObject.slice(0, 600) : i.disconnectionObject,
+      updatedAt: i.updatedAt,
+    }))
+  } catch (e) { out.instances_error = e.message }
+  return out
+}
+
 export const evolutionProvider = {
   name: 'evolution',
 

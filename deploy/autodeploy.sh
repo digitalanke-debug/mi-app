@@ -9,6 +9,10 @@ if [ ! -s "/opt/crm/backups/crm-$TODAY.sql.gz" ] && docker compose ps --status r
     && echo "$(date -Is) respaldo crm-$TODAY.sql.gz ($(du -h "/opt/crm/backups/crm-$TODAY.sql.gz" | cut -f1))" >> /var/log/crm-autodeploy.log
   find /opt/crm/backups -name 'crm-*.sql.gz' -mtime +14 -delete
 fi
+# Registros recientes de WhatsApp para el diagnóstico del CRM (solo visibles para administradores)
+mkdir -p /var/log/crm-diag
+docker compose logs --no-color --since 30m --tail 600 evolution > /var/log/crm-diag/evolution.log 2>&1 || true
+
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 git fetch -q origin "$BRANCH" || exit 0
 LOCAL=$(git rev-parse HEAD); REMOTE=$(git rev-parse "origin/$BRANCH")

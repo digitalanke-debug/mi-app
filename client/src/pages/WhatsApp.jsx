@@ -36,14 +36,32 @@ export default function WhatsApp() {
   }
   const verifyMeta = async (i) => { try { const r = await api(`/whatsapp/instances/${i.id}/connect`, { method: 'POST' }); toast(`Conexión verificada${r.quality ? ` · calidad ${r.quality}` : ''}`, 'success'); load() } catch (e) { toast(e.message, 'error'); load() } }
   const copy = (t) => { navigator.clipboard?.writeText(t); toast('Copiado', 'success') }
-  const connect = async (i) => { setQrFor(i.id); try { await api(`/whatsapp/instances/${i.id}/connect`, { method: 'POST' }) } catch (e) { toast(e.message, 'error'); setQrFor(null) } }
+  const [qrImg, setQrImg] = useState(null)
+  const connect = async (i) => {
+    setQrFor(i.id); setQrImg(null)
+    try { const r = await api(`/whatsapp/instances/${i.id}/connect`, { method: 'POST' }); if (r?.qr) setQrImg(r.qr); load() }
+    catch (e) { toast(e.message, 'error'); setQrFor(null) }
+  }
   const disconnect = async (i) => { await api(`/whatsapp/instances/${i.id}/disconnect`, { method: 'POST' }); load() }
   const remove = async (i) => { if (!confirm(`¿Eliminar ${i.name}?`)) return; await api(`/whatsapp/instances/${i.id}`, { method: 'DELETE' }); load() }
-  const create = async () => { try { await api('/whatsapp/instances', { method: 'POST', body: { company_id: companyId, name } }); setCreating(false); setName(''); load() } catch (e) { toast(e.message, 'error') } }
+  // Crea el número y abre el QR de inmediato
+  const create = async () => {
+    try {
+      const inst = await api('/whatsapp/instances', { method: 'POST', body: { company_id: companyId, name: name || `WhatsApp ${company?.name || ''}`.trim() } })
+      setCreating(false); setName(''); await load(); connect(inst)
+    } catch (e) { toast(e.message, 'error') }
+  }
   const newLead = async (i) => { try { await api(`/whatsapp/demo/new-lead/${i.id}`, { method: 'POST' }); toast('Lead simulado creado. Míralo en la bandeja.', 'success') } catch (e) { toast(e.message, 'error') } }
   const toggleSim = async () => { const r = await api('/whatsapp/demo/simulator', { method: 'POST', body: { running: !sim, everyMs: 45000 } }); setSim(r.running) }
 
   const current = list.find((i) => i.id === qrFor)
+  // Mientras el QR está abierto, refresca el estado cada 3 s (por si el tiempo real se demora); el QR de WhatsApp cambia cada ~40 s
+  useEffect(() => {
+    if (!qrFor) return
+    const t = setInterval(() => { load() }, 3000)
+    return () => clearInterval(t)
+  }, [qrFor, load])
+  const shownQr = current?.qr_code || qrImg
   useEffect(() => { if (current?.status === 'connected' && qrFor) { toast(`${current.name} conectado`, 'success'); setTimeout(() => setQrFor(null), 1200) } }, [current?.status])
 
   return (
@@ -52,7 +70,7 @@ export default function WhatsApp() {
         <div><h1>WhatsApp Business · {company?.name}</h1><div className="sub">Conecta cada número por QR desde la app WhatsApp Business, o con la API oficial de Meta.</div></div>
         <div className="actions">{user.role === 'admin' && <>
           <button className="btn" onClick={() => openMeta(null)}><Icon name="link" size={15} /> Número de la API oficial</button>
-          <button className="btn btn-primary" onClick={() => setCreating(true)}><Icon name="plus" size={15} /> Conectar con QR</button></>}</div>
+          <button className="btn btn-primary" onClick={() => setCreating(true)}><Icon name="qr" size={15} /> Conectar número por QR</button></>}</div>
       </div>
       <div className="alert info"><Icon name="info" size={16} /><div>Dos formas de conectar: <b>por QR</b> (app WhatsApp Business del celular, sin costo por mensaje) o <b>API oficial de Meta</b> (número registrado en Meta, sin celular, plantillas aprobadas y cobro por conversación iniciada por la empresa).</div></div>
       {list.map((i) => (
@@ -118,20 +136,24 @@ export default function WhatsApp() {
         </div>}
       </Modal>}
 
-      {creating && <Modal title="Conectar otro número" onClose={() => setCreating(false)} footer={<button className="btn btn-primary" onClick={create}>Crear instancia</button>}>
+      {creating && <Modal title="Conectar otro número" onClose={() => setCreating(false)} footer={<button className="btn btn-primary" onClick={create}><Icon name="qr" size={15} /> Continuar y mostrar QR</button>}>
         <div className="field"><label>Nombre</label><input className="input" placeholder="Ej. WhatsApp Ventas Medellín" value={name} onChange={(e) => setName(e.target.value)} /></div>
-        <p className="small text-2">Después de crearla, pulsa "Conectar con QR" y escanea desde WhatsApp Business → Dispositivos vinculados.</p>
+        <p className="small text-2">Al continuar se muestra el código QR para escanear desde WhatsApp Business → Dispositivos vinculados.</p>
       </Modal>}
 
-      {qrFor && current && <Modal title={`Conectar ${current.name}`} onClose={() => setQrFor(null)}>
+      {qrFor && current && <Modal title={`Conectar ${current.name}`} onClose={() => { setQrFor(null); setQrImg(null) }}>
         <div className="qr-box">
-          {current.status === 'qr' && current.qr_code ? <img src={current.qr_code} width={260} height={260} alt="Código QR" /> : <div className="spinner" />}
-          <b>{STATUS[current.status]}</b>
+          {current.status === 'connected' ? <div className="ico-box" style={{ width: 72, height: 72 }}><Icon name="check" size={36} /></div>
+            : shownQr ? <img src={shownQr} width={260} height={260} alt="Código QR" />
+            : <div className="spinner" />}
+          <b>{current.status === 'connected' ? 'Conectado' : shownQr ? 'Escanea el código con el celular' : 'Generando código QR…'}</b>
           <ol>
             <li>Abre WhatsApp Business en el celular</li>
-            <li>Menú ⋮ → Dispositivos vinculados → Vincular un dispositivo</li>
-            <li>Escanea este código</li>
+            <li>Menú ⋮ (o Configuración en iPhone) → Dispositivos vinculados → Vincular un dispositivo</li>
+            <li>Apunta la cámara a este código</li>
           </ol>
+          <p className="small muted">El código se renueva solo cada 40 segundos aproximadamente. Si no aparece o expira, genera uno nuevo.</p>
+          {current.status !== 'connected' && <button className="btn btn-sm" onClick={() => connect(current)}><Icon name="refresh" size={14} /> Generar nuevo QR</button>}
         </div>
       </Modal>}
     </div>

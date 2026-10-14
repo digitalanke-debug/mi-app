@@ -21,6 +21,36 @@ async function api(path, { method = 'GET', body } = {}) {
   return data
 }
 
+const EVENTS = ['QRCODE_UPDATED', 'CONNECTION_UPDATE', 'MESSAGES_UPSERT', 'SEND_MESSAGE']
+// Evolution v2 descarta el webhook si no lleva enabled: true
+const webhookConfig = (inst) => ({ enabled: true, url: `${config.evolution.webhookBase}/api/whatsapp/webhooks/evolution/${inst.instance_key}`, byEvents: false, base64: true, events: EVENTS })
+
+/** Activa (o repara) el webhook de un número en Evolution */
+export async function ensureWebhook(inst) {
+  return api(`/webhook/set/${inst.instance_key}`, { method: 'POST', body: { webhook: webhookConfig(inst) } })
+}
+
+/**
+ * Respaldo del webhook: consulta a Evolution el estado real del número y lo sincroniza en el CRM.
+ * Devuelve true si cambió algo.
+ */
+export async function syncEvolutionStatus(inst) {
+  let state
+  try { state = (await api(`/instance/connectionState/${inst.instance_key}`))?.instance?.state } catch { return false }
+  if (state === 'open' && inst.status !== 'connected') {
+    let phone = inst.phone
+    try {
+      const list = await api(`/instance/fetchInstances?instanceName=${inst.instance_key}`)
+      const jid = (Array.isArray(list) ? list[0] : list)?.ownerJid || ''
+      if (jid) phone = `+${jid.split('@')[0]}`
+    } catch {}
+    await updateInstance(inst.id, { status: 'connected', qr_code: null, connected_at: now(), phone })
+    return true
+  }
+  if (state === 'close' && inst.status === 'connected') { await updateInstance(inst.id, { status: 'disconnected', qr_code: null }); return true }
+  return false
+}
+
 async function updateInstance(id, patch) {
   await db('whatsapp_instances').where({ id }).update(patch)
   const inst = await db('whatsapp_instances').where({ id }).first()
@@ -32,6 +62,10 @@ async function updateInstance(id, patch) {
 export async function evolutionDiag() {
   const out = {}
   try { out.server = await api('/') } catch (e) { out.server_error = e.message }
+  out.webhooks = {}
+  for (const i of await db('whatsapp_instances').where({ provider: 'evolution' })) {
+    try { const w = await api(`/webhook/find/${i.instance_key}`); out.webhooks[i.instance_key] = { enabled: w?.enabled, url: w?.url, events: w?.events } } catch (e) { out.webhooks[i.instance_key] = e.message }
+  }
   try {
     const list = await api('/instance/fetchInstances')
     out.instances = (Array.isArray(list) ? list : []).map((i) => ({
@@ -54,18 +88,14 @@ export const evolutionProvider = {
         instanceName: inst.instance_key,
         integration: 'WHATSAPP-BAILEYS',
         qrcode: false,
-        webhook: {
-          url: `${config.evolution.webhookBase}/api/webhooks/evolution/${inst.instance_key}`,
-          byEvents: false,
-          base64: true,
-          events: ['QRCODE_UPDATED', 'CONNECTION_UPDATE', 'MESSAGES_UPSERT', 'SEND_MESSAGE'],
-        },
+        webhook: webhookConfig(inst),
       },
     })
     return inst
   },
 
   async connect(inst) {
+    try { await ensureWebhook(inst) } catch (e) { console.warn('webhook/set:', e.message) }
     const data = await api(`/instance/connect/${inst.instance_key}`)
     const qr = data?.base64 || null
     await updateInstance(inst.id, { status: qr ? 'qr' : 'connecting', qr_code: qr })

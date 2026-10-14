@@ -17,6 +17,7 @@ import { settingsRouter } from './routes/settings.js'
 import { dashboardRouter } from './routes/dashboard.js'
 import { marketingRouter } from './routes/marketing.js'
 import { checkInactivity } from './services/automations.js'
+import { ensureWebhook, syncEvolutionStatus } from './services/whatsapp/evolutionProvider.js'
 import { startDemoSimulator } from './services/demoSimulator.js'
 
 const app = express()
@@ -65,6 +66,19 @@ if (config.seedOnEmpty) {
   if (!Number(u?.n)) { console.log('Base vacía: cargando datos demo…'); await import('./db/seed.js') }
 }
 setInterval(() => checkInactivity().catch((e) => console.error('inactivity:', e.message)), 60_000)
+
+// WhatsApp por QR: al arrancar repara el webhook de cada número y cada 15 s sincroniza su estado real
+if (config.whatsappProvider === 'evolution') {
+  const evoInstances = () => db('whatsapp_instances').where({ provider: 'evolution' })
+  setTimeout(async () => {
+    for (const inst of await evoInstances()) {
+      try { await ensureWebhook(inst); await syncEvolutionStatus(inst) } catch (e) { console.warn(`webhook ${inst.instance_key}:`, e.message) }
+    }
+  }, 5000)
+  setInterval(async () => {
+    try { for (const inst of await evoInstances()) await syncEvolutionStatus(inst) } catch (e) { console.warn('sync WhatsApp:', e.message) }
+  }, 15_000)
+}
 if (config.whatsappProvider === 'demo' && config.demoAutoLeads) startDemoSimulator({ everyMs: 90_000 })
 
 server.listen(config.port, () => {

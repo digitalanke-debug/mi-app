@@ -1,122 +1,93 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+import { useEffect, useState } from 'react'
+import { AppStoreProvider } from './store/AppStore.jsx'
+import { useStore } from './store/useStore.js'
+import Dashboard from './pages/Dashboard.jsx'
+import Clientes from './pages/Clientes.jsx'
+import CuentasPorPagar from './pages/CuentasPorPagar.jsx'
+import Caja from './pages/Caja.jsx'
+import Recordatorios from './pages/Recordatorios.jsx'
+import { cop } from './lib/format.js'
+import { computePriority } from './lib/priority.js'
+import { invoiceStatus } from './lib/invoices.js'
 
-function App() {
-  const [count, setCount] = useState(0)
+const NAV = [
+  { key: 'panel', label: 'Panel' },
+  { key: 'clientes', label: 'Clientes y facturación' },
+  { key: 'pagar', label: 'Cuentas por pagar' },
+  { key: 'caja', label: 'Caja' },
+  { key: 'recordatorios', label: 'Recordatorios' },
+]
+
+function readHash() {
+  const h = window.location.hash.replace('#/', '').replace('#', '')
+  return NAV.some((n) => n.key === h) ? h : 'panel'
+}
+
+function Shell() {
+  const { state, balance } = useStore()
+  const [page, setPage] = useState(readHash)
+  const [menuOpen, setMenuOpen] = useState(false)
+
+  useEffect(() => {
+    const onHash = () => setPage(readHash())
+    window.addEventListener('hashchange', onHash)
+    return () => window.removeEventListener('hashchange', onHash)
+  }, [])
+
+  function go(key) {
+    window.history.pushState(null, '', `#/${key}`)
+    setPage(key)
+    setMenuOpen(false)
+  }
+
+  const altas = state.expenses.filter((e) => e.status !== 'pagado' && computePriority(e) === 'alta').length
+  const vencidas = state.invoices.filter((i) => invoiceStatus(i) === 'vencida').length
+  const badges = { pagar: altas, recordatorios: vencidas }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
+    <div className="shell">
+      <aside className={`sidebar ${menuOpen ? 'open' : ''}`}>
+        <div className="brand">
+          <div className="brand-mark">S</div>
+          <div>
+            <div className="brand-name">{state.settings.firmName}</div>
+            <div className="brand-sub">Administración</div>
+          </div>
         </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
+        <nav>
+          {NAV.map((n) => (
+            <button key={n.key} type="button" className={page === n.key ? 'active' : ''} onClick={() => go(n.key)}>
+              <span>{n.label}</span>
+              {badges[n.key] > 0 && <span className="nav-badge">{badges[n.key]}</span>}
+            </button>
+          ))}
+        </nav>
+        <div className="sidebar-foot">
+          <div className="muted small">Saldo en cuenta</div>
+          <div className={`sidebar-balance ${balance < 0 ? 'text-danger' : ''}`}>{cop(balance)}</div>
         </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+      </aside>
+      <div className="topbar">
+        <button type="button" className="btn-icon" aria-label="Menú" onClick={() => setMenuOpen((v) => !v)}>☰</button>
+        <strong>{NAV.find((n) => n.key === page)?.label}</strong>
+        <span className="muted small">{cop(balance)}</span>
+      </div>
+      {menuOpen && <div className="scrim" onClick={() => setMenuOpen(false)} />}
+      <main className="content">
+        {page === 'panel' && <Dashboard go={go} />}
+        {page === 'clientes' && <Clientes />}
+        {page === 'pagar' && <CuentasPorPagar />}
+        {page === 'caja' && <Caja />}
+        {page === 'recordatorios' && <Recordatorios />}
+      </main>
+    </div>
   )
 }
 
-export default App
+export default function App() {
+  return (
+    <AppStoreProvider>
+      <Shell />
+    </AppStoreProvider>
+  )
+}

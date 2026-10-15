@@ -209,6 +209,7 @@ export function whatsappRouter() {
       estado: 'sin configurar',
     }
     if (cfg.configured) {
+      try { out.version = (await evolution.version())?.version || null } catch { /* ignorar */ }
       try {
         out.estado = await evolution.connectionState()
       } catch (e) {
@@ -222,8 +223,18 @@ export function whatsappRouter() {
   })
 
   // Crea la instancia si no existe, fija el webhook y devuelve el QR (o el estado si ya está conectada)
-  router.post('/connect', requireAuth, requireAdmin, async (req, res) => {
+  // Reinicia la vinculación: cierra sesión y borra la instancia para crearla de nuevo
+  router.post('/reset', requireAuth, requireAdmin, async (req, res) => {
     const cfg = evolutionConfig()
+    if (!cfg.configured) return res.status(400).json({ error: 'Falta configurar Evolution API' })
+    try { await evolution.logout() } catch { /* puede no estar conectada */ }
+    try { await evolution.deleteInstance() } catch (e) { if (e.status !== 404) return res.status(502).json({ error: e.message }) }
+    res.json({ ok: true })
+  })
+
+  router.post('/connect', requireAuth, requireAdmin, express.json(), async (req, res) => {
+    const cfg = evolutionConfig()
+    const number = digits(req.body?.number)
     if (!cfg.configured) return res.status(400).json({ error: 'Falta configurar EVOLUTION_URL y EVOLUTION_API_KEY en el servidor' })
     const url = webhookUrl()
     if (!url) return res.status(400).json({ error: 'Falta PUBLIC_URL o WHATSAPP_WEBHOOK_SECRET en el servidor' })
@@ -246,15 +257,18 @@ export function whatsappRouter() {
         await evolution.setWebhook(url)
         if (state === 'open') return res.json({ estado: 'open', qr: null })
       }
-      // El QR puede tardar un momento en generarse: reintenta unas veces
-      for (let i = 0; i < 4 && !qr; i++) {
+      // Con número: pide código de emparejamiento de 8 letras. Sin número: QR. Puede tardar un momento.
+      for (let i = 0; i < 5 && (number ? !pairingCode : !qr); i++) {
         await new Promise((r) => setTimeout(r, 1500))
-        const r = await evolution.connect().catch(() => null)
+        const r = await evolution.connect(number || undefined).catch(() => null)
         if (r?.instance?.state === 'open') return res.json({ estado: 'open', qr: null })
-        qr = pickQr(r)
+        qr = pickQr(r) || qr
         pairingCode = r?.pairingCode || pairingCode
       }
-      return res.json({ estado: 'connecting', qr, pairingCode, detalle: qr ? null : 'Evolution no devolvió el código QR todavía. Pulsa "Generar otro código".' })
+      const detalle = number
+        ? (pairingCode ? null : 'Evolution no entregó el código de emparejamiento. Reinicia la vinculación e inténtalo de nuevo.')
+        : (qr ? null : 'Evolution no devolvió el código QR todavía. Pulsa "Generar otro código".')
+      return res.json({ estado: 'connecting', qr: number ? null : qr, pairingCode, detalle })
     } catch (e) {
       const hint = /ECONNREFUSED|ENOTFOUND|fetch failed|timeout/i.test(e.message)
         ? ' La app no logra conectarse con Evolution API: revisa EVOLUTION_URL y EVOLUTION_NETWORK en el servidor (bash deploy/configurar-whatsapp.sh).'

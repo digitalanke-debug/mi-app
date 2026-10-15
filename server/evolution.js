@@ -53,9 +53,20 @@ export const evolution = {
       webhook: { enabled: true, url: webhookUrl, byEvents: false, base64: true, events: ['MESSAGES_UPSERT'] },
     })
   },
-  async connect() {
+  async connect(number) {
     const { instance } = evolutionConfig()
-    return call('GET', `/instance/connect/${instance}`)
+    return call('GET', `/instance/connect/${instance}${number ? `?number=${encodeURIComponent(number)}` : ''}`)
+  },
+  async logout() {
+    const { instance } = evolutionConfig()
+    return call('DELETE', `/instance/logout/${instance}`)
+  },
+  async deleteInstance() {
+    const { instance } = evolutionConfig()
+    return call('DELETE', `/instance/delete/${instance}`)
+  },
+  async version() {
+    return call('GET', '/')
   },
   async sendText(number, text) {
     const { instance } = evolutionConfig()

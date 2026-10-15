@@ -35,7 +35,8 @@ export const api = {
 
 export const waApi = {
   status: () => request('GET', '/api/whatsapp/status'),
-  connect: () => request('POST', '/api/whatsapp/connect'),
+  connect: (number) => request('POST', '/api/whatsapp/connect', { number: number || '' }),
+  reset: () => request('POST', '/api/whatsapp/reset'),
   sendReminder: (invoiceId, message) => request('POST', '/api/whatsapp/send-reminder', { invoiceId, message }),
   test: (text, reset) => request('POST', '/api/whatsapp/test', { text, reset }),
   sendInvoice: (invoiceId, message) => request('POST', '/api/whatsapp/send-invoice', { invoiceId, message }),

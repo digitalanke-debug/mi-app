@@ -18,6 +18,8 @@ export default function WhatsApp() {
   const [chatText, setChatText] = useState('')
   const [chatBusy, setChatBusy] = useState(false)
   const pollRef = useRef(null)
+  const [method, setMethod] = useState('qr')
+  const [phone, setPhone] = useState('')
 
   function refresh() {
     return waApi.status().then(setStatus).catch((e) => setErr(e.message))
@@ -28,7 +30,7 @@ export default function WhatsApp() {
 
   // Mientras se muestra el QR, consulta el estado cada 4 segundos
   useEffect(() => {
-    if (!qr) return
+    if (!qr && !pairingCode) return
     pollRef.current = setInterval(async () => {
       try {
         const s = await waApi.status()
@@ -37,17 +39,38 @@ export default function WhatsApp() {
       } catch { /* ignorar */ }
     }, 4000)
     return () => clearInterval(pollRef.current)
-  }, [qr])
+  }, [qr, pairingCode])
 
   async function connect() {
+    const num = phone.replace(/\D/g, '')
+    if (method === 'code' && num.length < 10) { setErr('Escribe el número del celular dedicado con indicativo, por ejemplo 573001234567.'); return }
     setBusy(true)
     setErr(null)
+    setQr(null)
+    setPairingCode(null)
     try {
-      const r = await waApi.connect()
-      setQr(r.qr)
+      const r = await waApi.connect(method === 'code' ? num : '')
+      setQr(r.qr || null)
       setPairingCode(r.pairingCode || null)
       if (r.detalle) setErr(r.detalle)
       await refresh()
+    } catch (e) {
+      setErr(e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function reset() {
+    if (!window.confirm('¿Reiniciar la vinculación? Se borra la sesión actual de WhatsApp de este número y se crea de nuevo. Los datos de la app no se tocan.')) return
+    setBusy(true)
+    setErr(null)
+    setQr(null)
+    setPairingCode(null)
+    try {
+      await waApi.reset()
+      await refresh()
+      setErr('Vinculación reiniciada. Ahora pulsa "Vincular número" otra vez.')
     } catch (e) {
       setErr(e.message)
     } finally {
@@ -109,13 +132,28 @@ export default function WhatsApp() {
           {status?.detalle && <p className="note note-danger">{status.detalle}</p>}
           {status?.evolution && !conectado && (
             <>
-              <p className="muted small">Vincula el número dedicado como si fuera "WhatsApp Web": en el celular abre WhatsApp → Dispositivos vinculados → Vincular dispositivo, y escanea el código.</p>
-              <button type="button" className="btn btn-primary" onClick={connect} disabled={busy}>{busy ? 'Generando…' : qr ? 'Generar otro código' : 'Vincular número'}</button>
-              {qr && (
+              <p className="muted small">Vincula el número dedicado como si fuera "WhatsApp Web": en el celular abre WhatsApp → Dispositivos vinculados → Vincular un dispositivo.</p>
+              <div className="row wrap" style={{ marginBottom: 10 }}>
+                <button type="button" className={`chip ${method === 'qr' ? 'active' : ''}`} onClick={() => setMethod('qr')}>Con código QR</button>
+                <button type="button" className={`chip ${method === 'code' ? 'active' : ''}`} onClick={() => setMethod('code')}>Con código de 8 letras</button>
+              </div>
+              {method === 'code' && (
+                <Field label="Número del celular dedicado, con indicativo" hint="Ej: 573001234567. En el celular elige 'Vincular con el número de teléfono'."><input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" /></Field>
+              )}
+              <div className="row wrap">
+                <button type="button" className="btn btn-primary" onClick={connect} disabled={busy}>{busy ? 'Generando…' : qr || pairingCode ? 'Generar otro código' : 'Vincular número'}</button>
+                <button type="button" className="btn" onClick={reset} disabled={busy}>Reiniciar vinculación</button>
+              </div>
+              {qr && method === 'qr' && (
                 <div className="qr">
                   <img src={qr.startsWith('data:') ? qr : `data:image/png;base64,${qr}`} alt="Código QR para vincular WhatsApp" />
-                  {pairingCode && <p className="muted small">Código de emparejamiento: <strong>{pairingCode}</strong></p>}
                   <p className="muted small">El código caduca en un minuto. Si no alcanzas, genera otro.</p>
+                </div>
+              )}
+              {pairingCode && method === 'code' && (
+                <div className="qr">
+                  <p className="pairing">{pairingCode}</p>
+                  <p className="muted small">En el celular: Dispositivos vinculados → Vincular un dispositivo → "Vincular con el número de teléfono" y escribe este código. Caduca en pocos minutos.</p>
                 </div>
               )}
             </>
@@ -123,7 +161,7 @@ export default function WhatsApp() {
           {conectado && <p className="muted">Listo. Los números autorizados ya pueden escribirle al asistente.</p>}
           {status && (
             <ul className="checks">
-              <li><Badge tone={status.evolution ? 'ok' : 'neutral'}>{status.evolution ? 'Sí' : 'No'}</Badge> Conexión con Evolution API</li>
+              <li><Badge tone={status.evolution ? 'ok' : 'neutral'}>{status.evolution ? 'Sí' : 'No'}</Badge> Conexión con Evolution API{status.version ? <span className="muted small"> · versión {status.version}</span> : null}</li>
               <li><Badge tone={status.webhook ? 'ok' : 'neutral'}>{status.webhook ? 'Sí' : 'No'}</Badge> Dirección pública para recibir mensajes</li>
               <li><Badge tone={status.asistente ? 'ok' : 'neutral'}>{status.asistente ? 'Sí' : 'No'}</Badge> Clave de Claude para el asistente</li>
               <li><Badge tone={status.voz ? 'ok' : 'neutral'}>{status.voz ? 'Sí' : 'No'}</Badge> Transcripción de notas de voz</li>

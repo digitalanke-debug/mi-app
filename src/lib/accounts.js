@@ -19,7 +19,7 @@ export function isLoan(account) {
  *  - deudas: lo que se debe en préstamos (saldo negativo convertido a positivo)
  *  - neto: disponible - deudas
  */
-export function totals(state) {
+export function totals(state, companyId = 'all') {
   let disponible = 0
   let deudas = 0
   const porCuenta = {}
@@ -27,6 +27,7 @@ export function totals(state) {
     const b = accountBalance(state, a.id)
     porCuenta[a.id] = b
     if (!a.active) continue
+    if (companyId !== 'all' && a.companyId !== companyId) continue
     if (isLoan(a)) deudas += Math.max(0, -b)
     else disponible += b
   }
@@ -34,8 +35,9 @@ export function totals(state) {
 }
 
 /** Cuenta por defecto para registrar pagos y cobros: la primera activa que no sea préstamo */
-export function defaultAccountId(state) {
-  const a = state.accounts.find((x) => x.active && !isLoan(x)) || state.accounts[0]
+export function defaultAccountId(state, companyId) {
+  const pool = companyId && companyId !== 'all' ? state.accounts.filter((x) => x.companyId === companyId) : state.accounts
+  const a = pool.find((x) => x.active && !isLoan(x)) || pool[0] || state.accounts[0]
   return a?.id
 }
 

@@ -8,8 +8,11 @@ import Caja from './pages/Caja.jsx'
 import Recordatorios from './pages/Recordatorios.jsx'
 import Usuarios from './pages/Usuarios.jsx'
 import WhatsApp from './pages/WhatsApp.jsx'
+import Empresas from './pages/Empresas.jsx'
+import Informes from './pages/Informes.jsx'
 import Login from './pages/Login.jsx'
 import { cop } from './lib/format.js'
+import { totals } from './lib/accounts.js'
 import { computePriority } from './lib/priority.js'
 import { invoiceStatus } from './lib/invoices.js'
 
@@ -19,6 +22,8 @@ const NAV = [
   { key: 'pagar', label: 'Cuentas por pagar' },
   { key: 'caja', label: 'Caja' },
   { key: 'recordatorios', label: 'Recordatorios' },
+  { key: 'informes', label: 'Informes' },
+  { key: 'empresas', label: 'Empresas', adminOnly: true },
   { key: 'whatsapp', label: 'Asistente WhatsApp', adminApiOnly: true },
   { key: 'usuarios', label: 'Usuarios y bitácora', adminApiOnly: true },
 ]
@@ -29,7 +34,8 @@ function readHash() {
 }
 
 function Shell() {
-  const { state, balance, user, mode, canEdit, saving, error, clearError, logout } = useStore()
+  const { state, user, mode, canEdit, saving, error, clearError, logout, companyId, setCompanyId, activeCompanies, company, scoped } = useStore()
+  const balance = totals(state, companyId).disponible
   const [page, setPage] = useState(readHash)
   const [menuOpen, setMenuOpen] = useState(false)
 
@@ -51,9 +57,9 @@ function Shell() {
     setMenuOpen(false)
   }
 
-  const nav = NAV.filter((n) => !n.adminApiOnly || (mode === 'api' && user?.role === 'admin'))
-  const altas = state.expenses.filter((e) => e.status !== 'pagado' && computePriority(e) === 'alta').length
-  const vencidas = state.invoices.filter((i) => invoiceStatus(i) === 'vencida').length
+  const nav = NAV.filter((n) => (!n.adminApiOnly || (mode === 'api' && user?.role === 'admin')) && (!n.adminOnly || canEdit))
+  const altas = scoped.expenses.filter((e) => e.status !== 'pagado' && computePriority(e) === 'alta').length
+  const vencidas = scoped.invoices.filter((i) => invoiceStatus(i) === 'vencida').length
   const badges = { pagar: altas, recordatorios: vencidas }
 
   return (
@@ -66,6 +72,13 @@ function Shell() {
             <div className="brand-sub">Administración</div>
           </div>
         </div>
+        <div className="company-switch">
+          <label className="small" htmlFor="company-select">Empresa</label>
+          <select id="company-select" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
+            <option value="all">Todas (consolidado)</option>
+            {activeCompanies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
         <nav>
           {nav.map((n) => (
             <button key={n.key} type="button" className={page === n.key ? 'active' : ''} onClick={() => go(n.key)}>
@@ -75,7 +88,7 @@ function Shell() {
           ))}
         </nav>
         <div className="sidebar-foot">
-          <div className="muted small">Saldo en cuenta</div>
+          <div className="muted small">Disponible · {company ? company.name : 'todas las empresas'}</div>
           <div className={`sidebar-balance ${balance < 0 ? 'text-danger' : ''}`}>{cop(balance)}</div>
           <div className="sidebar-user">
             <span className="small">{user?.name}{!canEdit && ' · solo lectura'}</span>
@@ -91,11 +104,13 @@ function Shell() {
       {menuOpen && <div className="scrim" onClick={() => setMenuOpen(false)} />}
       <main className="content">
         {!canEdit && <div className="banner">Tu usuario es de solo lectura: puedes consultar todo pero no registrar cambios.</div>}
-        {page === 'panel' && <Dashboard go={go} />}
-        {page === 'clientes' && <Clientes />}
-        {page === 'pagar' && <CuentasPorPagar />}
-        {page === 'caja' && <Caja />}
-        {page === 'recordatorios' && <Recordatorios />}
+        {page === 'panel' && <Dashboard go={go} key={companyId} />}
+        {page === 'clientes' && <Clientes key={companyId} />}
+        {page === 'pagar' && <CuentasPorPagar key={companyId} />}
+        {page === 'caja' && <Caja key={companyId} />}
+        {page === 'recordatorios' && <Recordatorios key={companyId} />}
+        {page === 'informes' && <Informes key={companyId} />}
+        {page === 'empresas' && canEdit && <Empresas />}
         {page === 'usuarios' && mode === 'api' && user?.role === 'admin' && <Usuarios />}
         {page === 'whatsapp' && mode === 'api' && user?.role === 'admin' && <WhatsApp />}
       </main>

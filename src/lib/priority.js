@@ -10,7 +10,7 @@ export const PRIORITY = {
  * Calcula la prioridad de una cuenta por pagar.
  * Regla:
  *  - Alta: vencida o vence en 7 días o menos, genera intereses/mora,
- *          o corta el servicio y vence en 15 días o menos.
+ *          corta el servicio y vence en 15 días o menos, o es un impuesto que vence en 15 días o menos.
  *  - Media: vence entre 8 y 20 días.
  *  - Baja: el resto.
  * Si la administrativa fijó una prioridad manual, esa manda.
@@ -21,6 +21,7 @@ export function computePriority(expense) {
   if (d <= 7) return 'alta'
   if (expense.hasInterest) return 'alta'
   if (expense.cutsService && d <= 15) return 'alta'
+  if (expense.category === 'Impuestos' && d <= 15) return 'alta'
   if (d <= 20) return 'media'
   return 'baja'
 }
@@ -32,6 +33,7 @@ export function priorityReason(expense) {
   if (d <= 7) return 'Vence en 7 días o menos'
   if (expense.hasInterest) return 'Genera intereses de mora'
   if (expense.cutsService && d <= 15) return 'Cortan el servicio y vence pronto'
+  if (expense.category === 'Impuestos' && d <= 15) return 'Impuesto que vence pronto'
   if (d <= 20) return 'Vence en menos de 20 días'
   return 'Hay tiempo'
 }

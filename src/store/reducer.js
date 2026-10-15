@@ -1,5 +1,5 @@
 import { monthKey, todayISO, uid } from '../lib/format.js'
-import { migrateState } from './migrate.js'
+import { migrateState, resolveCompanyId } from './migrate.js'
 import { defaultAccountId, totals } from '../lib/accounts.js'
 
 /** Saldo disponible consolidado (todas las cuentas activas que no son préstamo) */
@@ -45,6 +45,8 @@ export function generateRecurring(input, today = todayISO()) {
         recurringId: rec.id,
         period,
         notes: '',
+        tags: rec.tags || [],
+        companyId: rec.companyId,
       })
     }
   }
@@ -59,7 +61,7 @@ export function reducer(state, action) {
 
     // ---------- Clientes ----------
     case 'client/add':
-      return { ...state, clients: [...state.clients, { id: uid('cli'), ...action.client }] }
+      return { ...state, clients: [...state.clients, { id: uid('cli'), ...action.client, companyId: resolveCompanyId(state, action.client?.companyId) }] }
     case 'client/update':
       return {
         ...state,
@@ -74,11 +76,17 @@ export function reducer(state, action) {
 
     // ---------- Facturas / cuentas de cobro ----------
     case 'invoice/add': {
-      const number = action.invoice.number || `CC-${new Date().getFullYear()}-${String(state.nextInvoiceNumber).padStart(3, '0')}`
+      const client = state.clients.find((c) => c.id === action.invoice.clientId)
+      const companyId = resolveCompanyId(state, action.invoice.companyId || client?.companyId)
+      const company = state.companies.find((c) => c.id === companyId)
+      const counters = { ...(state.counters || {}) }
+      const n = counters[companyId] || 1
+      const number = action.invoice.number || `${company?.prefix || 'CC'}-${new Date().getFullYear()}-${String(n).padStart(3, '0')}`
+      if (!action.invoice.number) counters[companyId] = n + 1
       return {
         ...state,
-        nextInvoiceNumber: state.nextInvoiceNumber + 1,
-        invoices: [...state.invoices, { id: uid('inv'), payments: [], ...action.invoice, number }],
+        counters,
+        invoices: [...state.invoices, { id: uid('inv'), payments: [], ...action.invoice, number, companyId }],
       }
     }
     case 'invoice/update':
@@ -93,7 +101,7 @@ export function reducer(state, action) {
       const inv = state.invoices.find((i) => i.id === action.id)
       if (!inv) return state
       const client = state.clients.find((c) => c.id === inv.clientId)
-      const accountId = action.accountId || defaultAccountId(state)
+      const accountId = action.accountId || defaultAccountId(state, inv.companyId)
       const payment = { id: uid('pay'), date: action.date, amount: action.amount, note: action.note || '', accountId }
       const movement = {
         id: uid('mov'),
@@ -117,7 +125,7 @@ export function reducer(state, action) {
         ...state,
         expenses: [
           ...state.expenses,
-          { id: uid('exp'), status: 'pendiente', manualPriority: null, cutsService: false, hasInterest: false, notes: '', ...action.expense },
+          { id: uid('exp'), status: 'pendiente', manualPriority: null, cutsService: false, hasInterest: false, notes: '', tags: [], ...action.expense, companyId: resolveCompanyId(state, action.expense?.companyId) },
         ],
       }
     case 'expense/update':
@@ -131,7 +139,8 @@ export function reducer(state, action) {
       // Marca una o varias cuentas como pagadas y descuenta de caja
       const ids = new Set(action.ids)
       const date = action.date || todayISO()
-      const accountId = action.accountId || defaultAccountId(state)
+      const firstExpense = state.expenses.find((e) => ids.has(e.id))
+      const accountId = action.accountId || defaultAccountId(state, firstExpense?.companyId)
       const movements = []
       const expenses = state.expenses.map((e) => {
         if (!ids.has(e.id) || e.status === 'pagado') return e
@@ -162,7 +171,7 @@ export function reducer(state, action) {
 
     // ---------- Gastos fijos recurrentes ----------
     case 'recurring/add':
-      return generateRecurring({ ...state, recurring: [...state.recurring, { id: uid('rec'), active: true, ...action.rule }] })
+      return generateRecurring({ ...state, recurring: [...state.recurring, { id: uid('rec'), active: true, tags: [], ...action.rule, companyId: resolveCompanyId(state, action.rule?.companyId) }] })
     case 'recurring/update':
       return {
         ...state,
@@ -235,7 +244,7 @@ export function reducer(state, action) {
     // ---------- Cuentas (bancos, caja menor, préstamos) ----------
     case 'account/add': {
       const id = uid('acc')
-      const account = { id, active: true, type: 'banco', ...action.account }
+      const account = { id, active: true, type: 'banco', ...action.account, companyId: resolveCompanyId(state, action.account?.companyId) }
       let next = { ...state, accounts: [...state.accounts, account] }
       const initial = Number(action.initialBalance) || 0
       if (initial) {
@@ -257,8 +266,23 @@ export function reducer(state, action) {
     }
 
     // ---------- Recordatorios ----------
-    case 'reminder/add':
-      return { ...state, reminders: [...state.reminders, { id: uid('rem'), ...action.reminder }] }
+    case 'reminder/add': {
+      const inv = state.invoices.find((i) => i.id === action.reminder?.invoiceId)
+      return { ...state, reminders: [...state.reminders, { id: uid('rem'), ...action.reminder, companyId: resolveCompanyId(state, action.reminder?.companyId || inv?.companyId) }] }
+    }
+
+    // ---------- Empresas ----------
+    case 'company/add': {
+      const id = uid('emp')
+      return { ...state, companies: [...state.companies, { id, active: true, prefix: 'CC', regimen: 'ordinario', iva: true, ...action.company }], counters: { ...(state.counters || {}), [id]: 1 } }
+    }
+    case 'company/update':
+      return { ...state, companies: state.companies.map((c) => (c.id === action.id ? { ...c, ...action.company } : c)) }
+    case 'company/remove': {
+      const used = state.clients.some((x) => x.companyId === action.id) || state.expenses.some((x) => x.companyId === action.id) || state.accounts.some((x) => x.companyId === action.id)
+      if (used || state.companies.length <= 1) return { ...state, companies: state.companies.map((c) => (c.id === action.id ? { ...c, active: false } : c)) }
+      return { ...state, companies: state.companies.filter((c) => c.id !== action.id) }
+    }
 
     // ---------- Configuración ----------
     case 'settings/update':

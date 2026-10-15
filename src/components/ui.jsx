@@ -105,3 +105,32 @@ export function Confirm({ text, onYes, onNo, yesLabel = 'Sí, continuar' }) {
     </Modal>
   )
 }
+
+/** Selector de empresa para formularios. Solo se muestra cuando el usuario está en "Todas las empresas". */
+export function CompanyField({ companies, value, onChange, show = true, label = 'Empresa' }) {
+  if (!show) return null
+  return (
+    <Field label={label}>
+      <select className="input" value={value || ''} onChange={(e) => onChange(e.target.value)} required>
+        {companies.filter((c) => c.active).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+      </select>
+    </Field>
+  )
+}
+
+/** Campo de etiquetas separadas por coma, con sugerencias */
+export function TagsInput({ value = [], onChange, suggestions = [] }) {
+  const [text, setText] = useState(value.join(', '))
+  return (
+    <>
+      <input
+        className="input"
+        list="tag-suggestions"
+        value={text}
+        placeholder="Ej: Oficina, Dr. Suárez"
+        onChange={(e) => { setText(e.target.value); onChange(e.target.value.split(',').map((t) => t.trim()).filter(Boolean)) }}
+      />
+      <datalist id="tag-suggestions">{suggestions.map((t) => <option key={t} value={t} />)}</datalist>
+    </>
+  )
+}

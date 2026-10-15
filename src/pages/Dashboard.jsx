@@ -6,30 +6,31 @@ import { Kpi, PriorityBadge, Empty } from '../components/ui.jsx'
 import { totals, isLoan } from '../lib/accounts.js'
 
 export default function Dashboard({ go }) {
-  const { state, balance } = useStore()
-  const t = totals(state)
-  const activeAccounts = state.accounts.filter((a) => a.active)
+  const { state, companyId, company, activeCompanies, scoped } = useStore()
+  const t = totals(state, companyId)
+  const balance = t.disponible
+  const activeAccounts = scoped.accounts.filter((a) => a.active)
   const hoy = todayISO()
   const en30 = addDaysISO(hoy, 30)
 
-  const pendientes = state.expenses.filter((e) => e.status !== 'pagado')
+  const pendientes = scoped.expenses.filter((e) => e.status !== 'pagado')
   const porPagar30 = pendientes.filter((e) => e.dueDate <= en30).reduce((s, e) => s + e.amount, 0)
   const prioritarias = sortByPriority(pendientes.filter((e) => computePriority(e) === 'alta'))
   const totalPrioritarias = prioritarias.reduce((s, e) => s + e.amount, 0)
 
-  const porCobrar = state.invoices.reduce((s, i) => s + invoiceBalance(i), 0)
-  const vencidas = state.invoices.filter((i) => invoiceStatus(i) === 'vencida')
+  const porCobrar = scoped.invoices.reduce((s, i) => s + invoiceBalance(i), 0)
+  const vencidas = scoped.invoices.filter((i) => invoiceStatus(i) === 'vencida')
   const totalVencido = vencidas.reduce((s, i) => s + invoiceBalance(i), 0)
-  const porCobrar30 = state.invoices
+  const porCobrar30 = scoped.invoices
     .filter((i) => invoiceBalance(i) > 0 && i.dueDate <= en30)
     .reduce((s, i) => s + invoiceBalance(i), 0)
 
   const proyeccion = balance - porPagar30
   const proyeccionOptimista = balance + porCobrar30 - porPagar30
-  const aging = agingBuckets(state.invoices)
+  const aging = agingBuckets(scoped.invoices)
   const clientName = (id) => state.clients.find((c) => c.id === id)?.name ?? 'Cliente'
 
-  const proximasCobros = state.invoices
+  const proximasCobros = scoped.invoices
     .filter((i) => invoiceBalance(i) > 0)
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
     .slice(0, 6)
@@ -39,7 +40,7 @@ export default function Dashboard({ go }) {
       <header className="page-head">
         <div>
           <h1>Panel</h1>
-          <p className="muted">Resumen de {state.settings.firmName} al {fmtDateShort(hoy)}</p>
+          <p className="muted">{company ? company.name : `Consolidado de ${activeCompanies.length} empresa${activeCompanies.length === 1 ? '' : 's'}`} · {fmtDateShort(hoy)}</p>
         </div>
       </header>
 
@@ -54,6 +55,33 @@ export default function Dashboard({ go }) {
           tone={proyeccion < 0 ? 'danger' : 'ok'}
         />
       </section>
+
+      {companyId === 'all' && activeCompanies.length > 1 && (
+        <section className="card">
+          <div className="card-head"><h2>Por empresa</h2><span className="muted small">Cada empresa con su caja, su cartera y sus pagos</span></div>
+          <table className="table">
+            <thead><tr><th>Empresa</th><th className="num">Disponible</th><th className="num">Por cobrar</th><th className="num">Vencido</th><th className="num">Por pagar 30 días</th><th className="num">Prioritarias</th></tr></thead>
+            <tbody>
+              {activeCompanies.map((c) => {
+                const tc = totals(state, c.id)
+                const inv = state.invoices.filter((i) => i.companyId === c.id)
+                const exp = state.expenses.filter((e) => e.companyId === c.id && e.status !== 'pagado')
+                const pri = exp.filter((e) => computePriority(e) === 'alta')
+                return (
+                  <tr key={c.id}>
+                    <td><strong>{c.name}</strong></td>
+                    <td className="num">{cop(tc.disponible)}</td>
+                    <td className="num">{cop(inv.reduce((s, i) => s + invoiceBalance(i), 0))}</td>
+                    <td className="num text-danger">{cop(inv.filter((i) => invoiceStatus(i) === 'vencida').reduce((s, i) => s + invoiceBalance(i), 0))}</td>
+                    <td className="num">{cop(exp.filter((e) => e.dueDate <= en30).reduce((s, e) => s + e.amount, 0))}</td>
+                    <td className="num">{pri.length ? <span className="badge badge-danger">{pri.length} · {cop(pri.reduce((s, e) => s + e.amount, 0))}</span> : <span className="muted">0</span>}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </section>
+      )}
 
       {activeAccounts.length > 1 && (
         <div className="account-strip">

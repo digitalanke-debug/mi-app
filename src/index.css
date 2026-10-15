@@ -279,3 +279,16 @@ textarea.input { resize: vertical; }
 .two-col { columns: 2; column-gap: 24px; padding-left: 18px; }
 code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-size: 12.5px; }
 @media (max-width: 820px) { .two-col { columns: 1; } }
+
+/* ---------- Selector de empresa ---------- */
+.company-switch { padding: 4px 18px 10px; display: flex; flex-direction: column; gap: 4px; }
+.company-switch label { color: #a9b8cc; }
+.company-switch select { width: 100%; padding: 7px 8px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.1); color: #fff; font: inherit; font-size: 13.5px; }
+.company-switch select option { color: var(--text); }
+.company-table td .small { display: block; }
+
+/* ---------- Informes ---------- */
+.bars { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.bars-label { display: flex; justify-content: space-between; font-size: 13.5px; margin-bottom: 3px; }
+.bars-track { height: 8px; background: var(--surface-2); border-radius: 99px; overflow: hidden; }
+.bars-fill { height: 100%; background: var(--primary-2); border-radius: 99px; }

@@ -10,7 +10,7 @@ function fillTemplate(tpl, vars) {
 }
 
 export default function Recordatorios() {
-  const { state, dispatch, mode, canEdit } = useStore()
+  const { state, dispatch, mode, canEdit, scoped } = useStore()
   const [modal, setModal] = useState(null)
   const [waReady, setWaReady] = useState(false)
   useEffect(() => {
@@ -21,8 +21,8 @@ export default function Recordatorios() {
   const clientOf = (id) => state.clients.find((c) => c.id === id)
 
   const pendientes = useMemo(
-    () => state.invoices.filter((i) => invoiceBalance(i) > 0).sort((a, b) => a.dueDate.localeCompare(b.dueDate)),
-    [state.invoices],
+    () => scoped.invoices.filter((i) => invoiceBalance(i) > 0).sort((a, b) => a.dueDate.localeCompare(b.dueDate)),
+    [scoped.invoices],
   )
   const visibles = pendientes.filter((i) => {
     if (filter === 'vencidas') return daysUntil(i.dueDate) < 0
@@ -33,7 +33,7 @@ export default function Recordatorios() {
   const lastReminder = (invoiceId) =>
     [...state.reminders].filter((r) => r.invoiceId === invoiceId).sort((a, b) => b.date.localeCompare(a.date))[0]
 
-  const historial = [...state.reminders].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 30)
+  const historial = [...scoped.reminders].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 30)
 
   return (
     <div className="page">

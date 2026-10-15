@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { StoreContext, STORAGE_MODE } from './useStore.js'
+import { ScopeProvider } from './ScopeProvider.jsx'
 import { reducer, generateRecurring, cashBalance } from './reducer.js'
 import { load, save, clear } from './storage.js'
 import { buildSeed, emptyState } from './seed.js'
@@ -58,7 +59,7 @@ function LocalProvider({ children }) {
     }),
     [state],
   )
-  return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>
+  return <StoreContext.Provider value={value}><ScopeProvider state={state}>{children}</ScopeProvider></StoreContext.Provider>
 }
 
 // ---------------- Modo API ----------------
@@ -139,5 +140,5 @@ function ApiProvider({ children }) {
     }),
     [state, dispatch, user, saving, error, login, logout, loadState],
   )
-  return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>
+  return <StoreContext.Provider value={value}><ScopeProvider state={state}>{children}</ScopeProvider></StoreContext.Provider>
 }

@@ -4,11 +4,12 @@ import { cop, fmtDate, todayISO, monthKey } from '../lib/format.js'
 import { totals, isLoan, defaultAccountId, accountName } from '../lib/accounts.js'
 import { ACCOUNT_TYPES } from '../store/migrate.js'
 import { downloadCSV } from '../lib/csv.js'
-import { Modal, MoneyInput, Field, Empty, Confirm, Kpi } from '../components/ui.jsx'
+import { Modal, MoneyInput, Field, Empty, Confirm, Kpi, CompanyField } from '../components/ui.jsx'
 
 export default function Caja() {
-  const { state, dispatch, resetToSeed, resetEmpty, exportJSON, importJSON, mode } = useStore()
+  const { state, dispatch, resetToSeed, resetEmpty, exportJSON, importJSON, mode, companyId, companies, scoped } = useStore()
   const [accountId, setAccountId] = useState('all')
+  const companyName = (id) => companies.find((c) => c.id === id)?.name ?? ''
   const [movModal, setMovModal] = useState(null)
   const [balanceModal, setBalanceModal] = useState(null)
   const [transferModal, setTransferModal] = useState(false)
@@ -19,14 +20,15 @@ export default function Caja() {
   const [settings, setSettings] = useState(state.settings)
   const fileRef = useRef(null)
 
-  const t = useMemo(() => totals(state), [state])
-  const activeAccounts = state.accounts.filter((a) => a.active)
-  const inactiveAccounts = state.accounts.filter((a) => !a.active)
+  const t = useMemo(() => totals(state, companyId), [state, companyId])
+  const activeAccounts = scoped.accounts.filter((a) => a.active)
+  const inactiveAccounts = scoped.accounts.filter((a) => !a.active)
+  const scopedIds = useMemo(() => new Set(scoped.accounts.map((a) => a.id)), [scoped.accounts])
   const selected = accountId === 'all' ? null : state.accounts.find((a) => a.id === accountId)
 
   const movements = useMemo(
-    () => [...state.cash.movements].sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id)),
-    [state.cash.movements],
+    () => state.cash.movements.filter((m) => scopedIds.has(m.accountId)).sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id)),
+    [state.cash.movements, scopedIds],
   )
   const months = useMemo(() => [...new Set(movements.map((m) => monthKey(m.date)))].sort().reverse(), [movements])
   const visibles = movements.filter(
@@ -72,7 +74,7 @@ export default function Caja() {
             <button type="button" key={a.id} className={`account-card ${accountId === a.id ? 'active' : ''} ${loan ? 'account-loan' : ''}`} onClick={() => setAccountId(a.id)}>
               <div className="account-name">{a.name}</div>
               <div className={`account-balance ${loan ? 'text-danger' : b < 0 ? 'text-danger' : ''}`}>{loan ? cop(Math.max(0, -b)) : cop(b)}</div>
-              <div className="muted small">{loan ? 'Saldo de la deuda' : ACCOUNT_TYPES[a.type] || a.type}</div>
+              <div className="muted small">{companyId === 'all' ? companyName(a.companyId) : loan ? 'Saldo de la deuda' : ACCOUNT_TYPES[a.type] || a.type}</div>
             </button>
           )
         })}
@@ -170,16 +172,19 @@ export default function Caja() {
       </section>
 
       {movModal && (
-        <MovementForm accounts={activeAccounts} defaultId={selected?.id || defaultAccountId(state)} onClose={() => setMovModal(null)} onSave={(m) => { dispatch({ type: 'cash/movement', movement: m }); setMovModal(null) }} />
+        <MovementForm accounts={activeAccounts} defaultId={selected?.id || defaultAccountId(state, companyId)} onClose={() => setMovModal(null)} onSave={(m) => { dispatch({ type: 'cash/movement', movement: m }); setMovModal(null) }} />
       )}
       {balanceModal && (
         <BalanceForm account={balanceModal} current={t.porCuenta[balanceModal.id] || 0} onClose={() => setBalanceModal(null)} onSave={(b, d) => { dispatch({ type: 'cash/setBalance', accountId: balanceModal.id, balance: b, description: d }); setBalanceModal(null) }} />
       )}
       {transferModal && (
-        <TransferForm accounts={activeAccounts} balances={t.porCuenta} initialTo={transferModal.toId} initialFrom={selected && !isLoan(selected) ? selected.id : defaultAccountId(state)} onClose={() => setTransferModal(false)} onSave={(tr) => { dispatch({ type: 'cash/transfer', ...tr }); setTransferModal(false) }} />
+        <TransferForm accounts={activeAccounts} balances={t.porCuenta} initialTo={transferModal.toId} initialFrom={selected && !isLoan(selected) ? selected.id : defaultAccountId(state, companyId)} onClose={() => setTransferModal(false)} onSave={(tr) => { dispatch({ type: 'cash/transfer', ...tr }); setTransferModal(false) }} />
       )}
       {accountModal && (
         <AccountForm
+          companies={companies}
+          showCompany={companyId === 'all' || !!accountModal.account}
+          defaultCompanyId={companyId === 'all' ? companies.find((c) => c.active)?.id : companyId}
           initial={accountModal.account}
           onClose={() => setAccountModal(null)}
           onDeactivate={accountModal.account ? () => setConfirm({ text: `¿Desactivar la cuenta "${accountModal.account.name}"? Sus movimientos se conservan y deja de sumar en el total.`, onYes: () => { dispatch({ type: 'account/remove', id: accountModal.account.id }); setAccountModal(null); setAccountId('all'); setConfirm(null) } }) : null}
@@ -283,12 +288,13 @@ function TransferForm({ accounts, balances, initialFrom, initialTo, onClose, onS
   )
 }
 
-function AccountForm({ initial, onClose, onSave, onDeactivate }) {
-  const [f, setF] = useState(initial ? { name: initial.name, type: initial.type } : { name: '', type: 'banco' })
+function AccountForm({ initial, companies, showCompany, defaultCompanyId, onClose, onSave, onDeactivate }) {
+  const [f, setF] = useState(initial ? { name: initial.name, type: initial.type, companyId: initial.companyId } : { name: '', type: 'banco', companyId: defaultCompanyId })
   const [initialBalance, setInitialBalance] = useState(0)
   return (
     <Modal title={initial ? 'Editar cuenta' : 'Nueva cuenta'} onClose={onClose}>
       <form className="form" onSubmit={(e) => { e.preventDefault(); if (f.name.trim()) onSave(f, initialBalance) }}>
+        <CompanyField companies={companies} value={f.companyId} onChange={(v) => setF({ ...f, companyId: v })} show={showCompany} />
         <Field label="Nombre"><input className="input" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} required autoFocus placeholder="Ej: Bancolombia, Davivienda, Caja menor, Préstamo" /></Field>
         <Field label="Tipo" hint="Los préstamos se muestran como deuda y restan en el neto, pero no en el disponible.">
           <select className="input" value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })}>

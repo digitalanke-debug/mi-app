@@ -3,14 +3,14 @@ import { useStore } from '../store/useStore.js'
 import { cop, fmtDate, todayISO, addDaysISO, relativeDue } from '../lib/format.js'
 import { invoiceBalance, invoicePaid, invoiceStatus, invoiceTotal, clientBalance, clientOverdue } from '../lib/invoices.js'
 import { downloadCSV } from '../lib/csv.js'
-import { Modal, StatusBadge, MoneyInput, Field, Empty, Confirm } from '../components/ui.jsx'
+import { Modal, StatusBadge, MoneyInput, Field, Empty, Confirm, CompanyField } from '../components/ui.jsx'
 import { AccountSelect } from './Caja.jsx'
 import { defaultAccountId, totals, accountName } from '../lib/accounts.js'
 
 const blankClient = { name: '', nit: '', phone: '', email: '', contact: '', notes: '' }
 
 export default function Clientes() {
-  const { state, dispatch } = useStore()
+  const { state, dispatch, companyId, companies, scoped } = useStore()
   const [search, setSearch] = useState('')
   const [selectedId, setSelectedId] = useState(null)
   const [clientModal, setClientModal] = useState(null) // null | {mode:'new'} | {mode:'edit', client}
@@ -21,26 +21,27 @@ export default function Clientes() {
 
   const clients = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return state.clients
+    return scoped.clients
       .map((c) => ({ ...c, balance: clientBalance(state.invoices, c.id), overdue: clientOverdue(state.invoices, c.id) }))
       .filter((c) => !q || c.name.toLowerCase().includes(q) || (c.nit || '').toLowerCase().includes(q))
       .filter((c) => !onlyDebt || c.balance > 0)
       .sort((a, b) => b.overdue - a.overdue || b.balance - a.balance || a.name.localeCompare(b.name))
-  }, [state.clients, state.invoices, search, onlyDebt])
+  }, [scoped.clients, state.invoices, search, onlyDebt])
 
   const selected = state.clients.find((c) => c.id === selectedId) || null
   const selectedInvoices = selected
     ? state.invoices.filter((i) => i.clientId === selected.id).sort((a, b) => b.issueDate.localeCompare(a.issueDate))
     : []
 
-  const totalCartera = state.invoices.reduce((s, i) => s + invoiceBalance(i), 0)
+  const totalCartera = scoped.invoices.reduce((s, i) => s + invoiceBalance(i), 0)
+  const companyName = (id) => companies.find((c) => c.id === id)?.name ?? ''
 
   function exportar() {
-    const rows = state.invoices.map((i) => {
+    const rows = scoped.invoices.map((i) => {
       const c = state.clients.find((x) => x.id === i.clientId)
-      return [i.number, c?.name ?? '', c?.nit ?? '', i.concept, i.issueDate, i.dueDate, invoiceTotal(i), invoicePaid(i), invoiceBalance(i), invoiceStatus(i)]
+      return [i.number, companyName(i.companyId), c?.name ?? '', c?.nit ?? '', i.concept, i.issueDate, i.dueDate, invoiceTotal(i), invoicePaid(i), invoiceBalance(i), invoiceStatus(i)]
     })
-    downloadCSV('cuentas-de-cobro.csv', ['Número', 'Cliente', 'NIT/CC', 'Concepto', 'Emisión', 'Vencimiento', 'Total', 'Pagado', 'Saldo', 'Estado'], rows)
+    downloadCSV('cuentas-de-cobro.csv', ['Número', 'Empresa', 'Cliente', 'NIT/CC', 'Concepto', 'Emisión', 'Vencimiento', 'Total', 'Pagado', 'Saldo', 'Estado'], rows)
   }
 
   return (
@@ -71,7 +72,7 @@ export default function Clientes() {
                   <button type="button" className={`list-item list-btn ${c.id === selectedId ? 'active' : ''}`} onClick={() => setSelectedId(c.id)}>
                     <div className="list-main">
                       <strong>{c.name}</strong>
-                      <span className="muted">{c.nit || 'Sin NIT'}{c.overdue > 0 ? ` · ${cop(c.overdue)} vencido` : ''}</span>
+                      <span className="muted">{companyId === 'all' ? companyName(c.companyId) : (c.nit || 'Sin NIT')}{c.overdue > 0 ? ` · ${cop(c.overdue)} vencido` : ''}</span>
                     </div>
                     <div className="list-side">
                       <span className={`amount ${c.overdue > 0 ? 'text-danger' : ''}`}>{cop(c.balance)}</span>
@@ -92,7 +93,7 @@ export default function Clientes() {
                 <div>
                   <h2>{selected.name}</h2>
                   <p className="muted">
-                    {selected.nit && <>NIT/CC {selected.nit} · </>}
+                    <strong>{companyName(selected.companyId)}</strong> · {selected.nit && <>NIT/CC {selected.nit} · </>}
                     {selected.phone && <>Cel {selected.phone} · </>}
                     {selected.email}
                     {selected.contact && <> · Contacto: {selected.contact}</>}
@@ -158,7 +159,9 @@ export default function Clientes() {
 
       {clientModal && (
         <ClientForm
-          initial={clientModal.mode === 'edit' ? clientModal.client : blankClient}
+          companies={companies}
+          showCompany={companyId === 'all' || clientModal.mode === 'edit'}
+          initial={clientModal.mode === 'edit' ? clientModal.client : { ...blankClient, companyId: companyId === 'all' ? companies.find((c) => c.active)?.id : companyId }}
           onClose={() => setClientModal(null)}
           onSave={(data) => {
             if (clientModal.mode === 'edit') dispatch({ type: 'client/update', id: clientModal.client.id, client: data })
@@ -170,7 +173,7 @@ export default function Clientes() {
 
       {invoiceModal && (
         <InvoiceForm
-          clients={state.clients}
+          clients={invoiceModal.invoice ? state.clients.filter((c) => c.companyId === invoiceModal.invoice.companyId) : invoiceModal.clientId ? state.clients.filter((c) => c.companyId === state.clients.find((x) => x.id === invoiceModal.clientId)?.companyId) : scoped.clients}
           accounts={state.accounts}
           initial={invoiceModal.invoice}
           clientId={invoiceModal.clientId}
@@ -187,9 +190,9 @@ export default function Clientes() {
       {paymentModal && (
         <PaymentForm
           invoice={paymentModal}
-          accounts={state.accounts}
+          accounts={state.accounts.filter((a) => a.companyId === paymentModal.companyId)}
           balances={totals(state).porCuenta}
-          defaultAccountId={defaultAccountId(state)}
+          defaultAccountId={defaultAccountId(state, paymentModal.companyId)}
           onClose={() => setPaymentModal(null)}
           onSave={({ amount, date, note, accountId }) => {
             dispatch({ type: 'invoice/payment', id: paymentModal.id, amount, date, note, accountId })
@@ -203,12 +206,13 @@ export default function Clientes() {
   )
 }
 
-function ClientForm({ initial, onClose, onSave }) {
+function ClientForm({ initial, companies, showCompany, onClose, onSave }) {
   const [f, setF] = useState({ ...blankClient, ...initial })
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value })
   return (
     <Modal title={initial.name ? 'Editar cliente' : 'Nuevo cliente'} onClose={onClose}>
       <form className="form" onSubmit={(e) => { e.preventDefault(); if (f.name.trim()) onSave(f) }}>
+        <CompanyField companies={companies} value={f.companyId} onChange={(v) => setF({ ...f, companyId: v })} show={showCompany} />
         <Field label="Nombre o razón social"><input className="input" value={f.name} onChange={set('name')} required autoFocus /></Field>
         <div className="form-row">
           <Field label="NIT o cédula"><input className="input" value={f.nit} onChange={set('nit')} /></Field>

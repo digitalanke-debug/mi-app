@@ -3,17 +3,20 @@ import { useStore } from '../store/useStore.js'
 import { cop, fmtDate, todayISO, addDaysISO, relativeDue } from '../lib/format.js'
 import { computePriority, priorityReason, sortByPriority } from '../lib/priority.js'
 import { downloadCSV } from '../lib/csv.js'
-import { Modal, PriorityBadge, MoneyInput, Field, Empty, Confirm, StatusBadge } from '../components/ui.jsx'
+import { Modal, PriorityBadge, MoneyInput, Field, Empty, Confirm, StatusBadge, CompanyField, TagsInput } from '../components/ui.jsx'
 import { AccountSelect } from './Caja.jsx'
 import { defaultAccountId, totals, accountName } from '../lib/accounts.js'
 
 const CATEGORIES = ['Arriendo', 'Servicios', 'Nómina', 'Honorarios', 'Software', 'Oficina', 'Gastos de procesos', 'Impuestos', 'Financiero', 'Mantenimiento', 'Otros']
 
 export default function CuentasPorPagar() {
-  const { state, dispatch } = useStore()
-  const [accountId, setAccountId] = useState(() => defaultAccountId(state))
+  const { state, dispatch, companyId, companies, scoped } = useStore()
+  const [accountId, setAccountId] = useState(() => defaultAccountId(state, companyId))
   const t = totals(state)
   const balance = t.porCuenta[accountId] || 0
+  const companyName = (id) => companies.find((c) => c.id === id)?.name ?? ''
+  const allTags = useMemo(() => [...new Set([...state.expenses, ...state.recurring].flatMap((e) => e.tags || []))].sort(), [state.expenses, state.recurring])
+  const [filterTag, setFilterTag] = useState('')
   const [tab, setTab] = useState('pendientes') // pendientes | pagadas | fijos
   const [selected, setSelected] = useState(() => new Set())
   const [expenseModal, setExpenseModal] = useState(null)
@@ -22,9 +25,9 @@ export default function CuentasPorPagar() {
   const [payDate, setPayDate] = useState(todayISO())
   const [filterPriority, setFilterPriority] = useState('todas')
 
-  const pendientes = useMemo(() => sortByPriority(state.expenses.filter((e) => e.status !== 'pagado')), [state.expenses])
-  const visibles = pendientes.filter((e) => filterPriority === 'todas' || computePriority(e) === filterPriority)
-  const pagadas = useMemo(() => state.expenses.filter((e) => e.status === 'pagado').sort((a, b) => (b.paidAt || '').localeCompare(a.paidAt || '')), [state.expenses])
+  const pendientes = useMemo(() => sortByPriority(scoped.expenses.filter((e) => e.status !== 'pagado')), [scoped.expenses])
+  const visibles = pendientes.filter((e) => (filterPriority === 'todas' || computePriority(e) === filterPriority) && (!filterTag || (e.tags || []).includes(filterTag)))
+  const pagadas = useMemo(() => scoped.expenses.filter((e) => e.status === 'pagado').sort((a, b) => (b.paidAt || '').localeCompare(a.paidAt || '')), [scoped.expenses])
 
   const selectedList = pendientes.filter((e) => selected.has(e.id))
   const totalSel = selectedList.reduce((s, e) => s + e.amount, 0)
@@ -59,8 +62,8 @@ export default function CuentasPorPagar() {
     setConfirm(null)
   }
   function exportar() {
-    const rows = state.expenses.map((e) => [e.concept, e.supplier, e.category, e.dueDate, e.amount, e.status === 'pagado' ? 'Pagado' : 'Pendiente', e.status === 'pagado' ? '' : computePriority(e), e.paidAt || '', e.recurringId ? 'Sí' : 'No'])
-    downloadCSV('cuentas-por-pagar.csv', ['Concepto', 'Proveedor', 'Categoría', 'Vence', 'Valor', 'Estado', 'Prioridad', 'Pagado el', 'Gasto fijo'], rows)
+    const rows = scoped.expenses.map((e) => [companyName(e.companyId), e.concept, e.supplier, e.category, (e.tags || []).join(' | '), e.dueDate, e.amount, e.status === 'pagado' ? 'Pagado' : 'Pendiente', e.status === 'pagado' ? '' : computePriority(e), e.paidAt || '', e.recurringId ? 'Sí' : 'No'])
+    downloadCSV('cuentas-por-pagar.csv', ['Empresa', 'Concepto', 'Proveedor', 'Categoría', 'Etiquetas', 'Vence', 'Valor', 'Estado', 'Prioridad', 'Pagado el', 'Gasto fijo'], rows)
   }
 
   return (
@@ -80,7 +83,7 @@ export default function CuentasPorPagar() {
       <div className="tabs">
         <button type="button" className={tab === 'pendientes' ? 'active' : ''} onClick={() => setTab('pendientes')}>Pendientes ({pendientes.length})</button>
         <button type="button" className={tab === 'pagadas' ? 'active' : ''} onClick={() => setTab('pagadas')}>Pagadas ({pagadas.length})</button>
-        <button type="button" className={tab === 'fijos' ? 'active' : ''} onClick={() => setTab('fijos')}>Gastos fijos ({state.recurring.length})</button>
+        <button type="button" className={tab === 'fijos' ? 'active' : ''} onClick={() => setTab('fijos')}>Gastos fijos ({scoped.recurring.length})</button>
       </div>
 
       {tab === 'pendientes' && (
@@ -95,6 +98,12 @@ export default function CuentasPorPagar() {
                   </button>
                 ))}
               </div>
+              {allTags.length > 0 && (
+                <select className="input input-sm" value={filterTag} onChange={(e) => setFilterTag(e.target.value)}>
+                  <option value="">Todas las etiquetas</option>
+                  {allTags.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+              )}
             </div>
             {visibles.length === 0 ? (
               <Empty title="Nada pendiente" text="No hay cuentas por pagar en este filtro." />
@@ -118,7 +127,8 @@ export default function CuentasPorPagar() {
                         <td><input type="checkbox" checked={selected.has(e.id)} onChange={() => toggle(e.id)} aria-label={`Seleccionar ${e.concept}`} /></td>
                         <td>
                           <strong>{e.concept}</strong>
-                          <div className="muted small">{e.supplier}{e.category ? ` · ${e.category}` : ''}{e.recurringId ? ' · fijo' : ''}</div>
+                          <div className="muted small">{companyId === 'all' ? `${companyName(e.companyId)} · ` : ''}{e.supplier}{e.category ? ` · ${e.category}` : ''}{e.recurringId ? ' · fijo' : ''}</div>
+                          {(e.tags || []).length > 0 && <div>{e.tags.map((tg) => <span key={tg} className="badge badge-info" style={{ marginRight: 4, marginTop: 2 }}>{tg}</span>)}</div>}
                         </td>
                         <td>{fmtDate(e.dueDate)}<div className="muted small">{relativeDue(e.dueDate)}</div></td>
                         <td><PriorityBadge level={p} /><div className="muted small">{priorityReason(e)}</div></td>
@@ -137,7 +147,7 @@ export default function CuentasPorPagar() {
           <aside className="card calc">
             <h2>Calculadora de pagos</h2>
             <p className="muted small">Marca lo que vas a pagar y mira cómo queda la cuenta.</p>
-            <Field label="Pagar desde"><AccountSelect accounts={state.accounts} balances={t.porCuenta} value={accountId} onChange={setAccountId} excludeLoans /></Field>
+            <Field label="Pagar desde"><AccountSelect accounts={scoped.accounts} balances={t.porCuenta} value={accountId} onChange={setAccountId} excludeLoans /></Field>
             <div className="calc-row"><span>Saldo de la cuenta</span><strong>{cop(balance)}</strong></div>
             <div className="calc-row"><span>Seleccionado ({selectedList.length})</span><strong className="text-danger">− {cop(totalSel)}</strong></div>
             <div className={`calc-row calc-total ${restante < 0 ? 'text-danger' : 'text-ok'}`}><span>Quedaría</span><strong>{cop(restante)}</strong></div>
@@ -204,9 +214,9 @@ export default function CuentasPorPagar() {
             <table className="table">
               <thead><tr><th>Concepto</th><th>Proveedor</th><th>Día de pago</th><th className="num">Valor mensual</th><th>Estado</th><th></th></tr></thead>
               <tbody>
-                {state.recurring.map((r) => (
+                {scoped.recurring.map((r) => (
                   <tr key={r.id}>
-                    <td><strong>{r.concept}</strong><div className="muted small">{r.category}{r.cutsService ? ' · cortan el servicio' : ''}</div></td>
+                    <td><strong>{r.concept}</strong><div className="muted small">{companyId === 'all' ? `${companyName(r.companyId)} · ` : ''}{r.category}{r.cutsService ? ' · cortan el servicio' : ''}{(r.tags || []).length ? ` · ${r.tags.join(', ')}` : ''}</div></td>
                     <td>{r.supplier}</td>
                     <td>Día {r.dayOfMonth}</td>
                     <td className="num">{cop(r.amount)}</td>
@@ -221,13 +231,17 @@ export default function CuentasPorPagar() {
             </table>
           )}
           <div className="row-end" style={{ marginTop: 12 }}>
-            <span className="muted small">Total fijo mensual: <strong>{cop(state.recurring.filter((r) => r.active).reduce((s, r) => s + r.amount, 0))}</strong></span>
+            <span className="muted small">Total fijo mensual: <strong>{cop(scoped.recurring.filter((r) => r.active).reduce((s, r) => s + r.amount, 0))}</strong></span>
           </div>
         </section>
       )}
 
       {expenseModal && (
         <ExpenseForm
+          companies={companies}
+          showCompany={companyId === 'all' || !!expenseModal.expense}
+          defaultCompanyId={companyId === 'all' ? companies.find((c) => c.active)?.id : companyId}
+          tagSuggestions={allTags}
           initial={expenseModal.expense}
           onClose={() => setExpenseModal(null)}
           onDelete={expenseModal.expense ? () => setConfirm({ text: `¿Eliminar "${expenseModal.expense.concept}"?`, onYes: () => { dispatch({ type: 'expense/remove', id: expenseModal.expense.id }); setExpenseModal(null); setConfirm(null) } }) : null}
@@ -241,6 +255,10 @@ export default function CuentasPorPagar() {
 
       {ruleModal && (
         <RuleForm
+          companies={companies}
+          showCompany={companyId === 'all' || !!ruleModal.rule}
+          defaultCompanyId={companyId === 'all' ? companies.find((c) => c.active)?.id : companyId}
+          tagSuggestions={allTags}
           initial={ruleModal.rule}
           onClose={() => setRuleModal(null)}
           onDelete={ruleModal.rule ? () => setConfirm({ text: `¿Eliminar el gasto fijo "${ruleModal.rule.concept}"? Se borrarán sus cuentas pendientes generadas.`, onYes: () => { dispatch({ type: 'recurring/remove', id: ruleModal.rule.id }); setRuleModal(null); setConfirm(null) } }) : null}
@@ -257,13 +275,14 @@ export default function CuentasPorPagar() {
   )
 }
 
-function ExpenseForm({ initial, onClose, onSave, onDelete }) {
-  const [f, setF] = useState(initial ? { ...initial } : { concept: '', supplier: '', category: 'Otros', amount: 0, dueDate: addDaysISO(todayISO(), 15), manualPriority: null, cutsService: false, hasInterest: false, notes: '' })
+function ExpenseForm({ initial, companies, showCompany, defaultCompanyId, tagSuggestions, onClose, onSave, onDelete }) {
+  const [f, setF] = useState(initial ? { ...initial } : { companyId: defaultCompanyId, concept: '', supplier: '', category: 'Otros', amount: 0, dueDate: addDaysISO(todayISO(), 15), manualPriority: null, cutsService: false, hasInterest: false, notes: '', tags: [] })
   const set = (k) => (e) => setF({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value })
   const auto = computePriority({ ...f, manualPriority: null })
   return (
     <Modal title={initial ? 'Editar cuenta por pagar' : 'Nueva cuenta por pagar'} onClose={onClose}>
       <form className="form" onSubmit={(e) => { e.preventDefault(); if (f.concept.trim() && f.amount > 0) onSave(f) }}>
+        <CompanyField companies={companies} value={f.companyId} onChange={(v) => setF({ ...f, companyId: v })} show={showCompany} />
         <Field label="Concepto"><input className="input" value={f.concept} onChange={set('concept')} required autoFocus /></Field>
         <div className="form-row">
           <Field label="Proveedor"><input className="input" value={f.supplier} onChange={set('supplier')} /></Field>
@@ -287,6 +306,7 @@ function ExpenseForm({ initial, onClose, onSave, onDelete }) {
             <option value="baja">Forzar: Baja</option>
           </select>
         </Field>
+        <Field label="Etiquetas (rubros)" hint="Separadas por coma. Sirven para informes: Oficina, Dr. Suárez, Gastos de procesos…"><TagsInput value={f.tags || []} onChange={(tags) => setF({ ...f, tags })} suggestions={tagSuggestions} /></Field>
         <Field label="Notas"><input className="input" value={f.notes || ''} onChange={set('notes')} /></Field>
         <div className="row-between">
           {onDelete ? <button type="button" className="btn btn-link text-danger" onClick={onDelete}>Eliminar</button> : <span />}
@@ -300,12 +320,13 @@ function ExpenseForm({ initial, onClose, onSave, onDelete }) {
   )
 }
 
-function RuleForm({ initial, onClose, onSave, onDelete }) {
-  const [f, setF] = useState(initial ? { ...initial } : { concept: '', supplier: '', category: 'Servicios', amount: 0, dayOfMonth: 5, cutsService: false, active: true })
+function RuleForm({ initial, companies, showCompany, defaultCompanyId, tagSuggestions, onClose, onSave, onDelete }) {
+  const [f, setF] = useState(initial ? { ...initial } : { companyId: defaultCompanyId, concept: '', supplier: '', category: 'Servicios', amount: 0, dayOfMonth: 5, cutsService: false, active: true, tags: [] })
   const set = (k) => (e) => setF({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value })
   return (
     <Modal title={initial ? 'Editar gasto fijo' : 'Nuevo gasto fijo mensual'} onClose={onClose}>
       <form className="form" onSubmit={(e) => { e.preventDefault(); if (f.concept.trim() && f.amount > 0) onSave({ ...f, dayOfMonth: Math.min(31, Math.max(1, Number(f.dayOfMonth) || 1)) }) }}>
+        <CompanyField companies={companies} value={f.companyId} onChange={(v) => setF({ ...f, companyId: v })} show={showCompany} />
         <Field label="Concepto"><input className="input" value={f.concept} onChange={set('concept')} required autoFocus placeholder="Ej: Arriendo oficina" /></Field>
         <div className="form-row">
           <Field label="Proveedor"><input className="input" value={f.supplier} onChange={set('supplier')} /></Field>
@@ -318,6 +339,7 @@ function RuleForm({ initial, onClose, onSave, onDelete }) {
           <Field label="Día del mes en que vence"><input className="input" type="number" min={1} max={31} value={f.dayOfMonth} onChange={set('dayOfMonth')} /></Field>
         </div>
         <label className="check"><input type="checkbox" checked={!!f.cutsService} onChange={set('cutsService')} /> Si no se paga cortan el servicio (sube la prioridad)</label>
+        <Field label="Etiquetas (rubros)"><TagsInput value={f.tags || []} onChange={(tags) => setF({ ...f, tags })} suggestions={tagSuggestions} /></Field>
         <div className="row-between">
           {onDelete ? <button type="button" className="btn btn-link text-danger" onClick={onDelete}>Eliminar</button> : <span />}
           <div className="row">

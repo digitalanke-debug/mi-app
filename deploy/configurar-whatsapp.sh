@@ -7,11 +7,11 @@ cd "$(dirname "$0")/.."
 
 say() { printf '\n\033[1;34m>>> %s\033[0m\n' "$*"; }
 setvar() { if grep -q "^$1=" .env; then sed -i "s#^$1=.*#$1=$2#" .env; else echo "$1=$2" >> .env; fi; }
-getvar() { grep "^$1=" .env | head -1 | cut -d= -f2-; }
+getvar() { { grep "^$1=" .env || true; } | head -1 | cut -d= -f2-; }
 
 # ---------- Evolution API ----------
 say "Buscando Evolution API en este servidor"
-EVO_CONTAINER=$(docker ps --format '{{.Names}} {{.Image}}' | awk '/evolution-api/ {print $1; exit}' || true)
+EVO_CONTAINER=$(docker ps --format '{{.Names}} {{.Image}}' | { awk '/evolution-api/ {print $1; exit}' || true; })
 EVO_KEY=""
 EVO_PORT=""
 if [ -n "$EVO_CONTAINER" ]; then

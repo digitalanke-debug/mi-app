@@ -5,11 +5,15 @@ cuentas por pagar con prioridad automática, control de caja y recordatorios de 
 
 ## Módulos
 
+- **Empresas**: varias empresas (por ejemplo Suárez & Gómez, Auténtica, Núcleo Tributario) con selector arriba a la izquierda y vista consolidada. Cada una con NIT, régimen, prefijo de cuentas de cobro y datos de pago.
+
 - **Panel**: saldo en cuenta, cartera por cobrar, pagos prioritarios, proyección a 30 días y antigüedad de cartera.
 - **Clientes y facturación**: clientes, cuentas de cobro con honorarios y gastos reembolsables, abonos parciales, estado automático.
-- **Cuentas por pagar**: gastos puntuales y gastos fijos mensuales (se generan solos), prioridad calculada, calculadora de pagos contra el saldo.
+- **Cuentas por pagar**: gastos puntuales y gastos fijos mensuales (se generan solos), etiquetas por rubro (Oficina, Dr. Suárez…), prioridad calculada, calculadora de pagos contra el saldo de la cuenta elegida.
 - **Caja y cuentas**: varias cuentas (bancos, caja menor, préstamos) con saldo por cuenta y consolidado, traslados, abonos a préstamos, movimientos automáticos por cobros y pagos, ajustes, respaldo y restauración.
-- **Recordatorios**: lista de quién está vencido o vence pronto, mensaje prellenado para WhatsApp o correo, envío automático desde el número de la firma, historial.
+- **Recordatorios**: lista de quién está vencido o vence pronto, mensaje prellenado para WhatsApp o correo, envío desde el número de la firma, recordatorios automáticos programados (antes del vencimiento, el día y en mora), historial.
+- **Informes**: facturado, cobrado, gastado y resultado por mes, por empresa, por rubro, por categoría y por cliente. Exportación CSV.
+- **Cuenta de cobro en PDF**: con los datos de la empresa, valor en letras y datos de pago; descargable y enviable por WhatsApp.
 - **Asistente WhatsApp**: la administración consulta y registra todo por WhatsApp, con texto, notas de voz, fotos o PDF. Ver [WHATSAPP.md](WHATSAPP.md).
 - **Usuarios y bitácora**: usuarios con rol, y registro de quién cambió qué.
 
@@ -41,7 +45,8 @@ Ver [DEPLOY.md](DEPLOY.md): Docker Compose con PostgreSQL, respaldo nocturno y H
 ## Regla de prioridad de pagos
 
 Prioridad **alta** si la cuenta ya venció o vence en 7 días o menos, si genera intereses de mora,
-o si cortan el servicio y vence en 15 días o menos. **Media** si vence en 20 días o menos. **Baja** el resto.
+si cortan el servicio y vence en 15 días o menos (teléfonos, internet, luz), o si es un impuesto que vence en 15 días o menos.
+**Media** si vence en 20 días o menos. **Baja** el resto.
 La prioridad se puede forzar manualmente en cada cuenta. La regla vive en `src/lib/priority.js`.
 
 ## Estructura
@@ -59,6 +64,6 @@ deploy/       Caddyfile, respaldo, scripts de instalación y despliegue
 
 ## Siguientes fases
 
-1. Importar los datos actuales desde Excel.
-2. Facturación electrónica DIAN a través de un proveedor tecnológico autorizado.
-3. Recordatorios automáticos programados (sin intervención) y resumen diario por WhatsApp.
+1. Importar los datos actuales desde Excel y, si se puede, desde el programa contable.
+2. Facturación electrónica (Factura Tech / World Office) conectada desde la app.
+3. Acceso por empresa para usuarios de solo lectura.

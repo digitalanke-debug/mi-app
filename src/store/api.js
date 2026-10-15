@@ -38,4 +38,5 @@ export const waApi = {
   connect: () => request('POST', '/api/whatsapp/connect'),
   sendReminder: (invoiceId, message) => request('POST', '/api/whatsapp/send-reminder', { invoiceId, message }),
   test: (text, reset) => request('POST', '/api/whatsapp/test', { text, reset }),
+  sendInvoice: (invoiceId, message) => request('POST', '/api/whatsapp/send-invoice', { invoiceId, message }),
 }

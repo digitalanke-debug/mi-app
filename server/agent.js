@@ -8,6 +8,8 @@ import { cop, todayISO, addDaysISO, daysUntil, fmtDate } from '../src/lib/format
 import { invoiceBalance, invoiceStatus, invoiceTotal, invoicePaid, agingBuckets } from '../src/lib/invoices.js'
 import { computePriority, sortByPriority } from '../src/lib/priority.js'
 import { totals, isLoan, defaultAccountId, accountName } from '../src/lib/accounts.js'
+import { monthlyReport, monthLabel } from '../src/lib/reports.js'
+import { resolveCompanyId, companyName } from '../src/store/migrate.js'
 
 const MODEL = process.env.ANTHROPIC_MODEL || 'claude-opus-5-5'
 
@@ -18,19 +20,29 @@ export function agentConfigured() {
 // ---------- Herramientas ----------
 const TOOLS = [
   {
-    name: 'resumen',
-    description: 'Resumen general: saldo disponible por cuenta, deudas, cartera por cobrar (vencida y por vencer), cuentas por pagar de los próximos 30 días y las prioritarias. Úsalo para responder "cómo vamos", "cuánto hay", "qué toca pagar".',
+    name: 'ver_empresas',
+    description: 'Lista las empresas registradas (id, nombre, NIT, régimen). Todo lo demás pertenece a una empresa.',
     input_schema: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  {
+    name: 'resumen',
+    description: 'Resumen: saldo disponible por cuenta, deudas, cartera por cobrar (vencida y por vencer), cuentas por pagar de los próximos 30 días y las prioritarias. Sin empresaId devuelve el consolidado de todas con detalle por empresa. Úsalo para "cómo vamos", "cuánto hay", "qué toca pagar".',
+    input_schema: { type: 'object', properties: { empresaId: { type: 'string' } }, additionalProperties: false },
+  },
+  {
+    name: 'informe_mensual',
+    description: 'Informe de un mes: facturado, cobrado, gastado, resultado, gastos por rubro (etiqueta) y categoría, facturado y cobrado por cliente. Sin empresaId consolida todas y detalla por empresa. Para "cuánto facturamos", "cuánto gastamos en oficina", "informe de septiembre".',
+    input_schema: { type: 'object', properties: { empresaId: { type: 'string' }, mes: { type: 'string', description: 'AAAA-MM. Por defecto el mes actual' } }, additionalProperties: false },
   },
   {
     name: 'ver_cuentas',
-    description: 'Lista las cuentas (bancos, caja menor, préstamos) con su id y saldo actual.',
-    input_schema: { type: 'object', properties: {}, additionalProperties: false },
+    description: 'Lista las cuentas (bancos, caja menor, préstamos) con su id, empresa y saldo actual.',
+    input_schema: { type: 'object', properties: { empresaId: { type: 'string' } }, additionalProperties: false },
   },
   {
     name: 'buscar_clientes',
-    description: 'Busca clientes por nombre o NIT y devuelve id, nombre, celular y saldo pendiente. Sin texto devuelve todos.',
-    input_schema: { type: 'object', properties: { texto: { type: 'string', description: 'Parte del nombre o NIT' } }, additionalProperties: false },
+    description: 'Busca clientes por nombre o NIT y devuelve id, empresa, nombre, celular y saldo pendiente. Sin texto devuelve todos.',
+    input_schema: { type: 'object', properties: { texto: { type: 'string', description: 'Parte del nombre o NIT' }, empresaId: { type: 'string' } }, additionalProperties: false },
   },
   {
     name: 'ver_cuentas_de_cobro',
@@ -39,6 +51,7 @@ const TOOLS = [
       type: 'object',
       properties: {
         clienteId: { type: 'string', description: 'Filtrar por cliente' },
+        empresaId: { type: 'string' },
         soloPendientes: { type: 'boolean', description: 'Solo las que tienen saldo (por defecto true)' },
       },
       additionalProperties: false,
@@ -52,6 +65,8 @@ const TOOLS = [
       properties: {
         soloPendientes: { type: 'boolean', description: 'Por defecto true' },
         prioridad: { type: 'string', enum: ['alta', 'media', 'baja'] },
+        empresaId: { type: 'string' },
+        etiqueta: { type: 'string', description: 'Filtrar por rubro/etiqueta, ej. Oficina' },
       },
       additionalProperties: false,
     },
@@ -63,6 +78,7 @@ const TOOLS = [
       type: 'object',
       properties: {
         nombre: { type: 'string' }, nit: { type: 'string' }, celular: { type: 'string', description: 'Solo dígitos, sin indicativo' }, correo: { type: 'string' }, notas: { type: 'string' },
+        empresaId: { type: 'string', description: 'Empresa a la que pertenece. Obligatorio si hay más de una.' },
       },
       required: ['nombre'],
       additionalProperties: false,
@@ -112,6 +128,8 @@ const TOOLS = [
         categoria: { type: 'string', enum: ['Arriendo', 'Servicios', 'Nómina', 'Honorarios', 'Software', 'Oficina', 'Gastos de procesos', 'Impuestos', 'Financiero', 'Mantenimiento', 'Otros'] },
         valor: { type: 'number' }, fechaLimite: { type: 'string', description: 'AAAA-MM-DD' },
         cortanServicio: { type: 'boolean' }, generaIntereses: { type: 'boolean' }, notas: { type: 'string' },
+        etiquetas: { type: 'array', items: { type: 'string' }, description: 'Rubros, ej. ["Oficina"] o ["Dr. Suárez"]' },
+        empresaId: { type: 'string', description: 'Obligatorio si hay más de una empresa' },
       },
       required: ['concepto', 'valor', 'fechaLimite'],
       additionalProperties: false,
@@ -164,6 +182,16 @@ const TOOLS = [
     },
   },
   {
+    name: 'enviar_cuenta_de_cobro',
+    description: 'Genera el PDF de una cuenta de cobro y lo envía por WhatsApp al celular del cliente, con un mensaje corto. Úsalo cuando pidan "mándale la cuenta de cobro a X".',
+    input_schema: {
+      type: 'object',
+      properties: { cuentaDeCobroId: { type: 'string' }, mensaje: { type: 'string', description: 'Texto que acompaña el PDF (opcional)' } },
+      required: ['cuentaDeCobroId'],
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'enviar_recordatorio',
     description: 'Envía por WhatsApp un recordatorio de pago al cliente de una cuenta de cobro y lo deja registrado. Si no pasas mensaje, se usa la plantilla de la firma.',
     input_schema: {
@@ -179,10 +207,10 @@ function fillTemplate(tpl, vars) {
   return tpl.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '')
 }
 
-function accountsView(state) {
+function accountsView(state, empresaId) {
   const t = totals(state)
-  return state.accounts.filter((a) => a.active).map((a) => ({
-    id: a.id, nombre: a.name, tipo: a.type,
+  return state.accounts.filter((a) => a.active && (!empresaId || a.companyId === empresaId)).map((a) => ({
+    id: a.id, nombre: a.name, tipo: a.type, empresa: companyName(state, a.companyId), empresaId: a.companyId,
     ...(isLoan(a) ? { deuda: Math.max(0, -(t.porCuenta[a.id] || 0)) } : { saldo: t.porCuenta[a.id] || 0 }),
   }))
 }
@@ -192,50 +220,80 @@ export async function runTool(name, input, actor, deps) {
   const { state } = await readState(actor)
   const clientOf = (id) => state.clients.find((c) => c.id === id)
   const money = (n) => Number(n) || 0
+  const empresas = state.companies.filter((c) => c.active)
+  const validEmpresa = (id) => id && state.companies.some((c) => c.id === id)
+  const scopeOf = (id) => (validEmpresa(id) ? (x) => x.companyId === id : () => true)
+  // Cuando hay varias empresas, crear registros exige decir cuál
+  const needEmpresa = (id) => empresas.length > 1 && !validEmpresa(id)
+  const empresaError = { error: 'Hay varias empresas. Indica empresaId (usa ver_empresas) o pregunta a la persona a cuál empresa corresponde.' }
 
   switch (name) {
+    case 'ver_empresas':
+      return empresas.map((c) => ({ id: c.id, nombre: c.name, nit: c.nit, regimen: c.regimen, practicaRetencion: c.regimen !== 'simple' }))
     case 'resumen': {
-      const t = totals(state)
-      const hoy = todayISO()
-      const en30 = addDaysISO(hoy, 30)
-      const pend = state.expenses.filter((e) => e.status !== 'pagado')
-      const prioritarias = sortByPriority(pend.filter((e) => computePriority(e) === 'alta'))
-      const vencidas = state.invoices.filter((i) => invoiceStatus(i) === 'vencida')
+      const build = (cid) => {
+        const inS = cid ? (x) => x.companyId === cid : () => true
+        const t = totals(state, cid || 'all')
+        const hoy = todayISO()
+        const en30 = addDaysISO(hoy, 30)
+        const pend = state.expenses.filter((e) => inS(e) && e.status !== 'pagado')
+        const prioritarias = sortByPriority(pend.filter((e) => computePriority(e) === 'alta'))
+        const invs = state.invoices.filter(inS)
+        const vencidas = invs.filter((i) => invoiceStatus(i) === 'vencida')
+        return {
+          empresa: cid ? companyName(state, cid) : 'Todas',
+          disponible: t.disponible, deudas: t.deudas, neto: t.neto,
+          cuentas: accountsView(state, cid),
+          porCobrarTotal: invs.reduce((s, i) => s + invoiceBalance(i), 0),
+          porCobrarVencido: vencidas.reduce((s, i) => s + invoiceBalance(i), 0),
+          clientesVencidos: vencidas.map((i) => ({ cliente: clientOf(i.clientId)?.name, numero: i.number, saldo: invoiceBalance(i), vencioHace: -daysUntil(i.dueDate) })),
+          porPagar30dias: pend.filter((e) => e.dueDate <= en30).reduce((s, e) => s + e.amount, 0),
+          prioritarias: prioritarias.map((e) => ({ id: e.id, concepto: e.concept, proveedor: e.supplier, valor: e.amount, vence: e.dueDate })),
+          totalPrioritarias: prioritarias.reduce((s, e) => s + e.amount, 0),
+          antiguedadCartera: agingBuckets(invs),
+        }
+      }
+      if (validEmpresa(input.empresaId)) return { fecha: todayISO(), ...build(input.empresaId) }
+      return { fecha: todayISO(), consolidado: build(null), porEmpresa: empresas.map((c) => build(c.id)) }
+    }
+    case 'informe_mensual': {
+      const mes = /^\d{4}-\d{2}$/.test(input.mes || '') ? input.mes : undefined
+      const r = monthlyReport(state, validEmpresa(input.empresaId) ? input.empresaId : 'all', mes)
       return {
-        fecha: hoy,
-        disponible: t.disponible, deudas: t.deudas, neto: t.neto,
-        cuentas: accountsView(state),
-        porCobrarTotal: state.invoices.reduce((s, i) => s + invoiceBalance(i), 0),
-        porCobrarVencido: vencidas.reduce((s, i) => s + invoiceBalance(i), 0),
-        clientesVencidos: vencidas.map((i) => ({ cliente: clientOf(i.clientId)?.name, numero: i.number, saldo: invoiceBalance(i), vencioHace: -daysUntil(i.dueDate) })),
-        porPagar30dias: pend.filter((e) => e.dueDate <= en30).reduce((s, e) => s + e.amount, 0),
-        prioritarias: prioritarias.map((e) => ({ id: e.id, concepto: e.concept, proveedor: e.supplier, valor: e.amount, vence: e.dueDate })),
-        totalPrioritarias: prioritarias.reduce((s, e) => s + e.amount, 0),
-        antiguedadCartera: agingBuckets(state.invoices),
+        mes: monthLabel(r.month), empresa: validEmpresa(input.empresaId) ? companyName(state, input.empresaId) : 'Todas',
+        facturado: r.facturado, honorarios: r.honorarios, gastosReembolsables: r.gastosReembolsables, cuentasDeCobroEmitidas: r.facturas,
+        cobrado: r.cobrado, pagosRecibidos: r.pagos,
+        gastosPagados: r.totalGastosPagados, otrosEgresos: r.totalOtrosEgresos, gastosPendientesDelMes: r.totalGastosPendientes,
+        resultado: r.resultado, carteraPendienteTotal: r.carteraPendiente,
+        gastosPorRubro: r.porEtiqueta, gastosPorCategoria: r.porCategoria, facturadoPorCliente: r.porCliente, cobradoPorCliente: r.cobrosPorCliente,
+        porEmpresa: r.porEmpresa,
       }
     }
     case 'ver_cuentas':
-      return accountsView(state)
+      return accountsView(state, validEmpresa(input.empresaId) ? input.empresaId : null)
     case 'buscar_clientes': {
       const q = (input.texto || '').toLowerCase().trim()
       return state.clients
+        .filter(scopeOf(input.empresaId))
         .filter((c) => !q || c.name.toLowerCase().includes(q) || (c.nit || '').toLowerCase().includes(q))
-        .map((c) => ({ id: c.id, nombre: c.name, nit: c.nit, celular: c.phone, correo: c.email, saldoPendiente: state.invoices.filter((i) => i.clientId === c.id).reduce((s, i) => s + invoiceBalance(i), 0) }))
+        .map((c) => ({ id: c.id, empresa: companyName(state, c.companyId), empresaId: c.companyId, nombre: c.name, nit: c.nit, celular: c.phone, correo: c.email, saldoPendiente: state.invoices.filter((i) => i.clientId === c.id).reduce((s, i) => s + invoiceBalance(i), 0) }))
     }
     case 'ver_cuentas_de_cobro': {
       const solo = input.soloPendientes !== false
       return state.invoices
+        .filter(scopeOf(input.empresaId))
         .filter((i) => (!input.clienteId || i.clientId === input.clienteId) && (!solo || invoiceBalance(i) > 0))
         .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
-        .map((i) => ({ id: i.id, numero: i.number, cliente: clientOf(i.clientId)?.name, clienteId: i.clientId, concepto: i.concept, total: invoiceTotal(i), pagado: invoicePaid(i), saldo: invoiceBalance(i), vence: i.dueDate, estado: invoiceStatus(i) }))
+        .map((i) => ({ id: i.id, numero: i.number, empresa: companyName(state, i.companyId), cliente: clientOf(i.clientId)?.name, clienteId: i.clientId, concepto: i.concept, total: invoiceTotal(i), pagado: invoicePaid(i), saldo: invoiceBalance(i), vence: i.dueDate, estado: invoiceStatus(i) }))
     }
     case 'ver_cuentas_por_pagar': {
       const solo = input.soloPendientes !== false
-      return sortByPriority(state.expenses.filter((e) => (!solo || e.status !== 'pagado') && (!input.prioridad || computePriority(e) === input.prioridad)))
-        .map((e) => ({ id: e.id, concepto: e.concept, proveedor: e.supplier, categoria: e.category, valor: e.amount, fechaLimite: e.dueDate, prioridad: e.status === 'pagado' ? null : computePriority(e), estado: e.status, gastoFijo: !!e.recurringId }))
+      return sortByPriority(state.expenses.filter(scopeOf(input.empresaId)).filter((e) => (!solo || e.status !== 'pagado') && (!input.prioridad || computePriority(e) === input.prioridad) && (!input.etiqueta || (e.tags || []).some((t) => t.toLowerCase() === input.etiqueta.toLowerCase()))))
+        .map((e) => ({ id: e.id, empresa: companyName(state, e.companyId), concepto: e.concept, proveedor: e.supplier, categoria: e.category, etiquetas: e.tags || [], valor: e.amount, fechaLimite: e.dueDate, prioridad: e.status === 'pagado' ? null : computePriority(e), estado: e.status, gastoFijo: !!e.recurringId }))
     }
     case 'crear_cliente': {
-      const r = await applyAction({ type: 'client/add', client: { name: input.nombre, nit: input.nit || '', phone: (input.celular || '').replace(/\D/g, ''), email: input.correo || '', contact: '', notes: input.notas || '' } }, actor)
+      if (needEmpresa(input.empresaId)) return empresaError
+      const r = await applyAction({ type: 'client/add', client: { name: input.nombre, nit: input.nit || '', phone: (input.celular || '').replace(/\D/g, ''), email: input.correo || '', contact: '', notes: input.notas || '', companyId: resolveCompanyId(state, input.empresaId) } }, actor)
       const c = r.state.clients[r.state.clients.length - 1]
       return { ok: true, clienteId: c.id, nombre: c.name }
     }
@@ -252,7 +310,7 @@ export async function runTool(name, input, actor, deps) {
       const inv = state.invoices.find((i) => i.id === input.cuentaDeCobroId)
       if (!inv) return { error: 'No existe esa cuenta de cobro. Usa ver_cuentas_de_cobro.' }
       if (!(money(input.valor) > 0)) return { error: 'El valor debe ser mayor a cero.' }
-      const accountId = input.cuentaId || defaultAccountId(state)
+      const accountId = input.cuentaId || defaultAccountId(state, inv.companyId)
       if (!state.accounts.some((a) => a.id === accountId)) return { error: 'No existe esa cuenta bancaria. Usa ver_cuentas.' }
       const r = await applyAction({ type: 'invoice/payment', id: inv.id, amount: money(input.valor), date: input.fecha || todayISO(), note: input.nota || 'Registrado por WhatsApp', accountId }, actor)
       const after = r.state.invoices.find((i) => i.id === inv.id)
@@ -260,14 +318,15 @@ export async function runTool(name, input, actor, deps) {
     }
     case 'crear_cuenta_por_pagar': {
       if (!(money(input.valor) > 0)) return { error: 'El valor debe ser mayor a cero.' }
-      const r = await applyAction({ type: 'expense/add', expense: { concept: input.concepto, supplier: input.proveedor || '', category: input.categoria || 'Otros', amount: money(input.valor), dueDate: input.fechaLimite, cutsService: !!input.cortanServicio, hasInterest: !!input.generaIntereses, notes: input.notas || '' } }, actor)
+      if (needEmpresa(input.empresaId)) return empresaError
+      const r = await applyAction({ type: 'expense/add', expense: { concept: input.concepto, supplier: input.proveedor || '', category: input.categoria || 'Otros', amount: money(input.valor), dueDate: input.fechaLimite, cutsService: !!input.cortanServicio, hasInterest: !!input.generaIntereses, notes: input.notas || '', tags: Array.isArray(input.etiquetas) ? input.etiquetas.map(String) : [], companyId: resolveCompanyId(state, input.empresaId) } }, actor)
       const e = r.state.expenses[r.state.expenses.length - 1]
       return { ok: true, id: e.id, concepto: e.concept, valor: e.amount, fechaLimite: e.dueDate, prioridad: computePriority(e) }
     }
     case 'pagar_cuentas_por_pagar': {
       const ids = (input.ids || []).filter((id) => state.expenses.some((e) => e.id === id && e.status !== 'pagado'))
       if (!ids.length) return { error: 'Ninguno de esos ids corresponde a una cuenta pendiente. Usa ver_cuentas_por_pagar.' }
-      const accountId = input.cuentaId || defaultAccountId(state)
+      const accountId = input.cuentaId || defaultAccountId(state, state.expenses.find((e) => e.id === ids[0])?.companyId)
       if (!state.accounts.some((a) => a.id === accountId)) return { error: 'No existe esa cuenta bancaria. Usa ver_cuentas.' }
       const total = state.expenses.filter((e) => ids.includes(e.id)).reduce((s, e) => s + e.amount, 0)
       const r = await applyAction({ type: 'expense/pay', ids, date: input.fecha || todayISO(), accountId }, actor)
@@ -290,6 +349,14 @@ export async function runTool(name, input, actor, deps) {
       const r = await applyAction({ type: 'cash/setBalance', accountId: input.cuentaId, balance: money(input.saldo), description: input.motivo || 'Ajuste por WhatsApp' }, actor)
       return { ok: true, cuentas: accountsView(r.state) }
     }
+    case 'enviar_cuenta_de_cobro': {
+      if (!deps?.sendInvoicePDF) return { error: 'El envío de PDF por WhatsApp no está disponible.' }
+      try {
+        return await deps.sendInvoicePDF(state, input.cuentaDeCobroId, input.mensaje, actor)
+      } catch (e) {
+        return { error: e.message }
+      }
+    }
     case 'enviar_recordatorio': {
       const inv = state.invoices.find((i) => i.id === input.cuentaDeCobroId)
       if (!inv) return { error: 'No existe esa cuenta de cobro.' }
@@ -309,9 +376,13 @@ export async function runTool(name, input, actor, deps) {
 
 function systemPrompt(state, actorName) {
   const hoy = todayISO()
-  return `Eres ${state.settings?.whatsapp?.assistantName || 'el asistente administrativo'} de ${state.settings.firmName}, un bufete de abogados en Colombia. Hablas por WhatsApp con ${actorName || 'la persona encargada de la administración'}.
+  const empresas = state.companies.filter((c) => c.active)
+  const listaEmpresas = empresas.map((c) => `${c.name} (id ${c.id}${c.regimen === 'simple' ? ', régimen simple' : ''})`).join('; ')
+  return `Eres ${state.settings?.whatsapp?.assistantName || 'el asistente administrativo'} de ${state.settings.firmName}, un grupo de empresas de servicios jurídicos y tributarios en Colombia. Hablas por WhatsApp con ${actorName || 'la persona encargada de la administración'}.
 
-Tu trabajo: consultar y registrar en el sistema administrativo (clientes, cuentas de cobro, pagos de clientes, cuentas por pagar, cuentas bancarias, caja menor, préstamos y recordatorios) usando las herramientas. Hoy es ${hoy}.
+Tu trabajo: consultar y registrar en el sistema administrativo (clientes, cuentas de cobro, pagos de clientes, cuentas por pagar, cuentas bancarias, caja menor, préstamos, recordatorios e informes) usando las herramientas. Hoy es ${hoy}.
+
+Empresas registradas: ${listaEmpresas || 'una sola'}. Cada cliente, gasto y cuenta bancaria pertenece a una empresa. Cuando pregunten sin decir empresa, responde con el consolidado y el detalle por empresa. Cuando vayan a crear algo y haya varias empresas, pregunta a cuál corresponde si no es evidente por el contexto (por ejemplo, si nombran a un cliente que ya existe, usa su empresa).
 
 Reglas:
 - Siempre consulta con las herramientas antes de afirmar cifras; nunca inventes datos ni ids.

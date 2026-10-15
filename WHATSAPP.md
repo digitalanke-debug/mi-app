@@ -38,6 +38,14 @@ cd /opt/sigo-admin && bash deploy/configurar-whatsapp.sh
 - Registros: "registra un pago de 2 millones de Inversiones del Norte, entró a Davivienda", "crea cuenta de cobro
   a Pérez por 1.500.000 de honorarios", "paga el arriendo y el internet desde Bancolombia", "abona 800 mil al préstamo".
 - Recordatorios: "mándale recordatorio a Constructora Horizonte" envía el mensaje al cliente desde el número de la firma.
+- Cuentas de cobro: "mándale la cuenta de cobro a Pérez" genera el PDF y lo envía al celular del cliente.
+- Informes: "cuánto facturamos en septiembre", "cuánto gastamos en oficina este mes", "cómo va Auténtica".
+- Varias empresas: responde consolidado y por empresa; al registrar algo pregunta a cuál empresa corresponde si no es evidente.
+
+## Automático (sin que nadie escriba)
+
+- **Recordatorios a clientes**: en la app, Recordatorios → Recordatorios automáticos. Se activan con el número conectado: N días antes del vencimiento, el día del vencimiento y cada X días en mora, a la hora indicada, nunca más de una vez al día por cuenta de cobro.
+- **Resumen diario**: en Asistente WhatsApp, "Enviar un resumen diario a los números autorizados" con la hora. Llega un mensaje por empresa con disponible, por cobrar, vencidas y pagos prioritarios.
 - Notas de voz con cualquiera de las anteriores (si la transcripción está activa).
 - Fotos o PDF de facturas: describe el contenido y propone cómo registrarlo.
 

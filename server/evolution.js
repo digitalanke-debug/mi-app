@@ -61,6 +61,10 @@ export const evolution = {
     const { instance } = evolutionConfig()
     return call('POST', `/message/sendText/${instance}`, { number, text })
   },
+  async sendDocument(number, base64, fileName, caption = '') {
+    const { instance } = evolutionConfig()
+    return call('POST', `/message/sendMedia/${instance}`, { number, mediatype: 'document', mimetype: 'application/pdf', fileName, caption, media: base64 })
+  },
   async getMediaBase64(key) {
     const { instance } = evolutionConfig()
     return call('POST', `/chat/getBase64FromMediaMessage/${instance}`, { message: { key }, convertToMp4: false })

@@ -13,6 +13,7 @@ export default function WhatsApp() {
   const [err, setErr] = useState(null)
   const [newNum, setNewNum] = useState({ name: '', phone: '' })
   const [assistantName, setAssistantName] = useState(wa.assistantName || '')
+  const [daily, setDaily] = useState(wa.dailySummary || { enabled: false, hour: 8 })
   const [chat, setChat] = useState([])
   const [chatText, setChatText] = useState('')
   const [chatBusy, setChatBusy] = useState(false)
@@ -149,8 +150,10 @@ export default function WhatsApp() {
             <div className="row-end"><button type="submit" className="btn btn-primary">Autorizar</button></div>
           </form>
           <hr />
-          <form className="form" onSubmit={(e) => { e.preventDefault(); saveWa({ assistantName }) }}>
+          <form className="form" onSubmit={(e) => { e.preventDefault(); saveWa({ assistantName, dailySummary: { enabled: !!daily.enabled, hour: Number(daily.hour) || 8 } }) }}>
             <Field label="Nombre del asistente"><input className="input" value={assistantName} onChange={(e) => setAssistantName(e.target.value)} /></Field>
+            <label className="check"><input type="checkbox" checked={!!daily.enabled} onChange={(e) => setDaily({ ...daily, enabled: e.target.checked })} /> Enviar un resumen diario a los números autorizados</label>
+            <Field label="Hora del resumen (0 a 23)"><input className="input" type="number" min={0} max={23} value={daily.hour} onChange={(e) => setDaily({ ...daily, hour: e.target.value })} /></Field>
             <div className="row-end"><button type="submit" className="btn">Guardar</button></div>
           </form>
         </section>

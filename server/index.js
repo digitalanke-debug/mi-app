@@ -7,6 +7,8 @@ import { ensureAdmin, requireAuth, requireAdmin, loginLimiter, setSession, clear
 import { emptyState } from '../src/store/seed.js'
 import { readState, applyAction, isAllowedAction, isValidState } from './state.js'
 import { whatsappRouter, migrateWhatsApp } from './whatsapp.js'
+import { cuentaDeCobroPDF } from './pdf.js'
+import { startScheduler } from './scheduler.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const PORT = Number(process.env.PORT || 3000)
@@ -104,6 +106,19 @@ app.post('/api/actions', requireAuth, async (req, res) => {
 
 app.use('/api/whatsapp', whatsappRouter())
 
+// Cuenta de cobro en PDF (descarga o vista en el navegador)
+app.get('/api/invoices/:id/pdf', requireAuth, async (req, res) => {
+  const { state } = await readState(req.user)
+  const inv = state.invoices.find((i) => i.id === req.params.id)
+  const client = inv && state.clients.find((c) => c.id === inv.clientId)
+  const company = inv && state.companies.find((c) => c.id === inv.companyId)
+  if (!inv || !client || !company) return res.status(404).json({ error: 'Cuenta de cobro no encontrada' })
+  const pdf = await cuentaDeCobroPDF({ company, client, invoice: inv })
+  res.setHeader('Content-Type', 'application/pdf')
+  res.setHeader('Content-Disposition', `${req.query.download ? 'attachment' : 'inline'}; filename="${inv.number}.pdf"`)
+  res.send(pdf)
+})
+
 app.get('/api/log', requireAuth, requireAdmin, async (req, res) => {
   const limit = Math.min(500, Number(req.query.limit) || 100)
   const r = await query('SELECT id, user_email, action, version, created_at FROM actions_log ORDER BY id DESC LIMIT $1', [limit])
@@ -133,6 +148,7 @@ async function main() {
   const r = await query('SELECT 1 FROM app_state WHERE id = 1')
   if (!r.rowCount) await query('INSERT INTO app_state (id, data, version) VALUES (1, $1, 0)', [emptyState()])
   await ensureAdmin()
+  startScheduler()
   app.listen(PORT, () => console.log(`API lista en el puerto ${PORT}`))
 }
 

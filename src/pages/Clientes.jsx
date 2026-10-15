@@ -1,17 +1,36 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useStore } from '../store/useStore.js'
 import { cop, fmtDate, todayISO, addDaysISO, relativeDue } from '../lib/format.js'
 import { invoiceBalance, invoicePaid, invoiceStatus, invoiceTotal, clientBalance, clientOverdue } from '../lib/invoices.js'
 import { downloadCSV } from '../lib/csv.js'
 import { Modal, StatusBadge, MoneyInput, Field, Empty, Confirm, CompanyField } from '../components/ui.jsx'
 import { AccountSelect } from './Caja.jsx'
+import { waApi } from '../store/api.js'
 import { defaultAccountId, totals, accountName } from '../lib/accounts.js'
 
 const blankClient = { name: '', nit: '', phone: '', email: '', contact: '', notes: '' }
 
 export default function Clientes() {
-  const { state, dispatch, companyId, companies, scoped } = useStore()
+  const { state, dispatch, companyId, companies, scoped, mode, canEdit } = useStore()
   const [search, setSearch] = useState('')
+  const [waReady, setWaReady] = useState(false)
+  const [sending, setSending] = useState(null)
+  const [notice, setNotice] = useState(null)
+  useEffect(() => {
+    if (mode === 'api' && canEdit) waApi.status().then((s) => setWaReady(s.estado === 'open')).catch(() => {})
+  }, [mode, canEdit])
+  async function enviarPDF(inv) {
+    setSending(inv.id)
+    setNotice(null)
+    try {
+      const r = await waApi.sendInvoice(inv.id)
+      setNotice({ ok: true, text: `Cuenta de cobro ${r.numero} enviada por WhatsApp a ${r.enviadoA}.` })
+    } catch (e) {
+      setNotice({ ok: false, text: e.message })
+    } finally {
+      setSending(null)
+    }
+  }
   const [selectedId, setSelectedId] = useState(null)
   const [clientModal, setClientModal] = useState(null) // null | {mode:'new'} | {mode:'edit', client}
   const [invoiceModal, setInvoiceModal] = useState(null) // null | {clientId} | {invoice}
@@ -106,6 +125,7 @@ export default function Clientes() {
                 </div>
               </div>
 
+              {notice && <p className={`note ${notice.ok ? 'note-ok' : 'note-danger'}`}>{notice.text}</p>}
               <div className="kpis kpis-3">
                 <div className="kpi"><div className="kpi-label">Saldo pendiente</div><div className="kpi-value">{cop(clientBalance(state.invoices, selected.id))}</div></div>
                 <div className="kpi"><div className="kpi-label">Vencido</div><div className="kpi-value text-danger">{cop(clientOverdue(state.invoices, selected.id))}</div></div>
@@ -141,6 +161,8 @@ export default function Clientes() {
                           <td className="actions">
                             {st !== 'pagada' && <button type="button" className="btn btn-sm btn-primary" onClick={() => setPaymentModal(i)}>Registrar pago</button>}
                             <button type="button" className="btn btn-sm" onClick={() => setInvoiceModal({ invoice: i })}>Ver</button>
+                            {mode === 'api' && <a className="btn btn-sm" href={`/api/invoices/${i.id}/pdf`} target="_blank" rel="noreferrer">PDF</a>}
+                            {mode === 'api' && waReady && st !== 'pagada' && selected.phone && <button type="button" className="btn btn-sm" disabled={sending === i.id} onClick={() => enviarPDF(i)}>{sending === i.id ? 'Enviando…' : 'Enviar por WhatsApp'}</button>}
                           </td>
                         </tr>
                       )

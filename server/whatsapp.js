@@ -11,6 +11,9 @@ import { runAgent, agentConfigured } from './agent.js'
 import { readState, applyAction, query } from './state.js'
 import { requireAuth, requireAdmin } from './auth.js'
 import { todayISO } from '../src/lib/format.js'
+import { cuentaDeCobroPDF } from './pdf.js'
+import { invoiceBalance } from '../src/lib/invoices.js'
+import { cop, fmtDate } from '../src/lib/format.js'
 
 const WEBHOOK_SECRET = process.env.WHATSAPP_WEBHOOK_SECRET || ''
 const PUBLIC_URL = (process.env.PUBLIC_URL || '').replace(/\/$/, '')
@@ -154,11 +157,27 @@ export async function handleIncoming(incoming, deps = {}) {
   }
 
   const history = await loadConversation(incoming.jid)
-  const agentDeps = { anthropic: deps.anthropic, useFallbacks: deps.useFallbacks, sendWhatsApp: sendText }
+  const agentDeps = { anthropic: deps.anthropic, useFallbacks: deps.useFallbacks, sendWhatsApp: sendText, sendInvoicePDF: (st, id, msg, act) => sendInvoicePDF(st, id, msg, act, { sendDocument: deps.sendDocument }) }
   const { reply: answer, messages } = await runAgent({ history, content, actor, actorName: allowed.name || incoming.pushName, deps: agentDeps })
   await saveConversation(incoming.jid, messages)
   await reply(answer)
   return { replied: true, answer }
+}
+
+/** Genera el PDF de una cuenta de cobro y lo envía al celular del cliente. Devuelve {ok, enviadoA}. */
+export async function sendInvoicePDF(state, invoiceId, message, actor, deps = {}) {
+  const inv = state.invoices.find((i) => i.id === invoiceId)
+  const client = inv && state.clients.find((c) => c.id === inv.clientId)
+  const company = inv && state.companies.find((c) => c.id === inv.companyId)
+  if (!inv || !client || !company) throw Object.assign(new Error('Cuenta de cobro no encontrada'), { status: 400 })
+  const phone = digits(client.phone)
+  if (!phone) throw Object.assign(new Error(`${client.name} no tiene celular registrado`), { status: 400 })
+  const pdf = await cuentaDeCobroPDF({ company, client, invoice: inv })
+  const caption = message || `Buen día ${client.contact || client.name}. Le compartimos la cuenta de cobro ${inv.number} de ${company.name} por ${cop(invoiceBalance(inv))}, con vencimiento el ${fmtDate(inv.dueDate)}. Quedamos atentos.`
+  const number = `${state.settings.countryCode || '57'}${phone}`
+  await (deps.sendDocument || ((n, b, f, c) => evolution.sendDocument(n, b, f, c)))(number, pdf.toString('base64'), `${inv.number}.pdf`, caption)
+  await applyAction({ type: 'reminder/add', reminder: { clientId: client.id, invoiceId: inv.id, date: todayISO(), channel: 'WhatsApp · cuenta de cobro PDF', message: caption } }, actor)
+  return { ok: true, enviadoA: client.name, celular: phone, numero: inv.number }
 }
 
 // ---------- router ----------
@@ -245,6 +264,18 @@ export function whatsappRouter() {
     }
     const r = await applyAction({ type: 'reminder/add', reminder: { clientId: client.id, invoiceId: inv.id, date: todayISO(), channel: 'WhatsApp (automático)', message } }, req.user)
     res.json({ ok: true, state: r.state })
+  })
+
+  // Enviar la cuenta de cobro en PDF al cliente por WhatsApp
+  router.post('/send-invoice', requireAuth, requireAdmin, express.json(), async (req, res) => {
+    const { invoiceId, message } = req.body || {}
+    const { state } = await readState(req.user)
+    try {
+      const out = await sendInvoicePDF(state, invoiceId, message, req.user)
+      res.json(out)
+    } catch (e) {
+      res.status(e.status || 502).json({ error: e.message })
+    }
   })
 
   // Probar el asistente desde la app sin WhatsApp (solo admin)

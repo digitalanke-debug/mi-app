@@ -11,6 +11,7 @@ function fillTemplate(tpl, vars) {
 
 export default function Recordatorios() {
   const { state, dispatch, mode, canEdit, scoped } = useStore()
+  const [cfg, setCfg] = useState(state.settings.reminders || { auto: false, daysBefore: 3, onDue: true, everyDaysOverdue: 7, hour: 9 })
   const [modal, setModal] = useState(null)
   const [waReady, setWaReady] = useState(false)
   useEffect(() => {
@@ -79,6 +80,26 @@ export default function Recordatorios() {
           </table>
         )}
       </section>
+
+      {canEdit && (
+        <section className="card">
+          <div className="card-head">
+            <h2>Recordatorios automáticos</h2>
+            <span className="muted small">{mode === 'api' ? (waReady ? 'Número de WhatsApp conectado' : 'Requiere el número de WhatsApp conectado') : 'Disponible en el servidor'}</span>
+          </div>
+          <form className="form" onSubmit={(e) => { e.preventDefault(); dispatch({ type: 'settings/update', settings: { reminders: { ...cfg, daysBefore: Number(cfg.daysBefore) || 0, everyDaysOverdue: Number(cfg.everyDaysOverdue) || 0, hour: Number(cfg.hour) || 9 } } }) }}>
+            <label className="check"><input type="checkbox" checked={!!cfg.auto} onChange={(e) => setCfg({ ...cfg, auto: e.target.checked })} /> Enviar recordatorios automáticamente por WhatsApp desde el número de la firma</label>
+            <div className="form-row">
+              <Field label="Días antes del vencimiento" hint="0 para no avisar antes"><input className="input" type="number" min={0} max={30} value={cfg.daysBefore} onChange={(e) => setCfg({ ...cfg, daysBefore: e.target.value })} /></Field>
+              <Field label="Cada cuántos días en mora" hint="0 para no insistir"><input className="input" type="number" min={0} max={60} value={cfg.everyDaysOverdue} onChange={(e) => setCfg({ ...cfg, everyDaysOverdue: e.target.value })} /></Field>
+              <Field label="Hora de envío (0 a 23)"><input className="input" type="number" min={0} max={23} value={cfg.hour} onChange={(e) => setCfg({ ...cfg, hour: e.target.value })} /></Field>
+            </div>
+            <label className="check"><input type="checkbox" checked={!!cfg.onDue} onChange={(e) => setCfg({ ...cfg, onDue: e.target.checked })} /> Avisar el mismo día del vencimiento</label>
+            <p className="muted small">Usa la plantilla de Caja → Configuración. Solo escribe a clientes con celular registrado y nunca más de una vez al día por cuenta de cobro.</p>
+            <div className="row-end"><button type="submit" className="btn btn-primary">Guardar</button></div>
+          </form>
+        </section>
+      )}
 
       <section className="card">
         <div className="card-head"><h2>Historial de recordatorios</h2></div>

@@ -2,7 +2,7 @@ import { query, withState } from './db.js'
 import { reducer, generateRecurring } from '../src/store/reducer.js'
 import { migrateState } from '../src/store/migrate.js'
 
-const ALLOWED_PREFIX = ['client/', 'invoice/', 'expense/', 'recurring/', 'cash/', 'account/', 'reminder/', 'settings/']
+const ALLOWED_PREFIX = ['client/', 'invoice/', 'expense/', 'recurring/', 'cash/', 'account/', 'company/', 'reminder/', 'settings/']
 
 export function isAllowedAction(type) {
   return typeof type === 'string' && ALLOWED_PREFIX.some((p) => type.startsWith(p))

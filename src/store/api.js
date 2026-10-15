@@ -32,3 +32,10 @@ export const api = {
   updateUser: (id, patch) => request('PATCH', `/api/users/${id}`, patch),
   log: (limit) => request('GET', `/api/log?limit=${limit || 100}`),
 }
+
+export const waApi = {
+  status: () => request('GET', '/api/whatsapp/status'),
+  connect: () => request('POST', '/api/whatsapp/connect'),
+  sendReminder: (invoiceId, message) => request('POST', '/api/whatsapp/send-reminder', { invoiceId, message }),
+  test: (text, reset) => request('POST', '/api/whatsapp/test', { text, reset }),
+}

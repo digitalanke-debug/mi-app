@@ -25,12 +25,35 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       ADMIN_NAME: ${ADMIN_NAME:-Administradora}
+      PUBLIC_URL: https://${DOMAIN}
+      # WhatsApp (Evolution API) y asistente
+      EVOLUTION_URL: ${EVOLUTION_URL:-}
+      EVOLUTION_API_KEY: ${EVOLUTION_API_KEY:-}
+      EVOLUTION_INSTANCE: ${EVOLUTION_INSTANCE:-sygo-admin}
+      WHATSAPP_WEBHOOK_SECRET: ${WHATSAPP_WEBHOOK_SECRET:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-opus-5-5}
+      TRANSCRIBE_URL: ${TRANSCRIBE_URL:-}
+    extra_hosts:
+      # Permite llegar a servicios que corren en el servidor (Evolution API del CRM) con host.docker.internal
+      - "host.docker.internal:host-gateway"
     depends_on:
       db:
         condition: service_healthy
     # Solo accesible desde el servidor; Caddy (o el proxy existente) lo expone.
     ports:
       - "127.0.0.1:${APP_PORT:-3000}:3000"
+
+  # Transcripción de notas de voz (Whisper en CPU). Se activa con VOICE_NOTES=true en .env
+  transcriber:
+    image: onerahmet/openai-whisper-asr-webservice:latest
+    restart: unless-stopped
+    profiles: ["voz"]
+    environment:
+      ASR_MODEL: ${WHISPER_MODEL:-small}
+      ASR_ENGINE: faster_whisper
+    volumes:
+      - whispercache:/root/.cache
 
   backup:
     image: postgres:16-alpine
@@ -65,3 +88,4 @@ volumes:
   dbdata:
   caddydata:
   caddyconfig:
+  whispercache:

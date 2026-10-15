@@ -39,6 +39,10 @@ server {
 
 Firewall: en Hetzner conviene crear un **Firewall** en el panel que permita solo los puertos 22, 80 y 443 y asignarlo al servidor.
 
+## Asistente de WhatsApp
+
+Después de instalar, ver [WHATSAPP.md](WHATSAPP.md): `bash deploy/configurar-whatsapp.sh` conecta con el Evolution API del servidor y guarda la clave de Claude.
+
 ## Actualizar la app
 
 Cada vez que haya cambios en el repositorio:

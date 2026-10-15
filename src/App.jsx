@@ -7,6 +7,7 @@ import CuentasPorPagar from './pages/CuentasPorPagar.jsx'
 import Caja from './pages/Caja.jsx'
 import Recordatorios from './pages/Recordatorios.jsx'
 import Usuarios from './pages/Usuarios.jsx'
+import WhatsApp from './pages/WhatsApp.jsx'
 import Login from './pages/Login.jsx'
 import { cop } from './lib/format.js'
 import { computePriority } from './lib/priority.js'
@@ -18,6 +19,7 @@ const NAV = [
   { key: 'pagar', label: 'Cuentas por pagar' },
   { key: 'caja', label: 'Caja' },
   { key: 'recordatorios', label: 'Recordatorios' },
+  { key: 'whatsapp', label: 'Asistente WhatsApp', adminApiOnly: true },
   { key: 'usuarios', label: 'Usuarios y bitácora', adminApiOnly: true },
 ]
 
@@ -95,6 +97,7 @@ function Shell() {
         {page === 'caja' && <Caja />}
         {page === 'recordatorios' && <Recordatorios />}
         {page === 'usuarios' && mode === 'api' && user?.role === 'admin' && <Usuarios />}
+        {page === 'whatsapp' && mode === 'api' && user?.role === 'admin' && <WhatsApp />}
       </main>
       {saving && <div className="toast toast-info">Guardando…</div>}
       {error && <div className="toast toast-danger" onClick={clearError}>{error}</div>}

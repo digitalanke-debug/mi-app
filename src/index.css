@@ -265,3 +265,17 @@ textarea.input { resize: vertical; }
 .account-balance { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .account-strip { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: -8px 0 18px; font-size: 13px; }
 .account-strip span strong { font-variant-numeric: tabular-nums; }
+
+/* ---------- WhatsApp ---------- */
+.qr { margin-top: 14px; text-align: center; }
+.qr img { width: 260px; max-width: 100%; border: 1px solid var(--border); border-radius: 8px; padding: 6px; background: #fff; }
+.checks { list-style: none; padding: 0; margin: 14px 0 0; display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; }
+.checks .badge { margin-right: 8px; min-width: 32px; text-align: center; }
+.chat { display: flex; flex-direction: column; gap: 8px; max-height: 360px; overflow: auto; padding: 12px; background: var(--surface-2); border-radius: 8px; margin-bottom: 10px; }
+.bubble { max-width: 78%; padding: 8px 12px; border-radius: 12px; font-size: 14px; white-space: pre-wrap; line-height: 1.4; }
+.bubble-yo { align-self: flex-end; background: #dcf1e4; }
+.bubble-asistente { align-self: flex-start; background: var(--surface); border: 1px solid var(--border); }
+.bubble-error { align-self: flex-start; background: var(--danger-bg); color: var(--danger); }
+.two-col { columns: 2; column-gap: 24px; padding-left: 18px; }
+code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-size: 12.5px; }
+@media (max-width: 820px) { .two-col { columns: 1; } }

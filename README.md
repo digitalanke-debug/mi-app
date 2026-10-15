@@ -8,8 +8,10 @@ cuentas por pagar con prioridad automática, control de caja y recordatorios de 
 - **Panel**: saldo en cuenta, cartera por cobrar, pagos prioritarios, proyección a 30 días y antigüedad de cartera.
 - **Clientes y facturación**: clientes, cuentas de cobro con honorarios y gastos reembolsables, abonos parciales, estado automático.
 - **Cuentas por pagar**: gastos puntuales y gastos fijos mensuales (se generan solos), prioridad calculada, calculadora de pagos contra el saldo.
-- **Caja**: saldo actual, movimientos automáticos por cobros y pagos, ajustes manuales, respaldo y restauración.
-- **Recordatorios**: lista de quién está vencido o vence pronto, mensaje prellenado para WhatsApp o correo, historial.
+- **Caja y cuentas**: varias cuentas (bancos, caja menor, préstamos) con saldo por cuenta y consolidado, traslados, abonos a préstamos, movimientos automáticos por cobros y pagos, ajustes, respaldo y restauración.
+- **Recordatorios**: lista de quién está vencido o vence pronto, mensaje prellenado para WhatsApp o correo, envío automático desde el número de la firma, historial.
+- **Asistente WhatsApp**: la administración consulta y registra todo por WhatsApp, con texto, notas de voz, fotos o PDF. Ver [WHATSAPP.md](WHATSAPP.md).
+- **Usuarios y bitácora**: usuarios con rol, y registro de quién cambió qué.
 
 ## Cómo correrla
 
@@ -50,7 +52,8 @@ src/
   store/      estado global (reducer), persistencia local, cliente de la API, datos de ejemplo
   components/ componentes de interfaz reutilizables
   pages/      Panel, Clientes, CuentasPorPagar, Caja, Recordatorios, Usuarios, Login
-server/       API en Node + Express: autenticación, usuarios, estado y bitácora en PostgreSQL
+server/       API en Node + Express: autenticación, usuarios, estado y bitácora en PostgreSQL,
+              integración con Evolution API (WhatsApp) y asistente con Claude
 deploy/       Caddyfile, respaldo, scripts de instalación y despliegue
 ```
 
@@ -58,4 +61,4 @@ deploy/       Caddyfile, respaldo, scripts de instalación y despliegue
 
 1. Importar los datos actuales desde Excel.
 2. Facturación electrónica DIAN a través de un proveedor tecnológico autorizado.
-3. Agente de IA conectado a WhatsApp Business que registre pagos, cree cuentas de cobro y envíe recordatorios usando las mismas acciones que ya expone el backend.
+3. Recordatorios automáticos programados (sin intervención) y resumen diario por WhatsApp.

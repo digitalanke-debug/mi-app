@@ -63,6 +63,10 @@ ADMIN_PASSWORD=$ADMIN_PASSWORD
 ADMIN_NAME=$ADMIN_NAME
 JWT_SECRET=$(openssl rand -hex 32)
 POSTGRES_PASSWORD=$(openssl rand -hex 16)
+WHATSAPP_WEBHOOK_SECRET=$(openssl rand -hex 24)
+EVOLUTION_INSTANCE=sygo-admin
+VOICE_NOTES=false
+TRANSCRIBE_URL=
 ENV
   chmod 600 .env
 else

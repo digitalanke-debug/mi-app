@@ -1,16 +1,21 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useStore } from '../store/useStore.js'
 import { cop, fmtDate, todayISO, daysUntil, relativeDue } from '../lib/format.js'
 import { invoiceBalance, invoiceStatus } from '../lib/invoices.js'
 import { Modal, StatusBadge, Field, Empty } from '../components/ui.jsx'
+import { waApi } from '../store/api.js'
 
 function fillTemplate(tpl, vars) {
   return tpl.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '')
 }
 
 export default function Recordatorios() {
-  const { state, dispatch } = useStore()
+  const { state, dispatch, mode, canEdit } = useStore()
   const [modal, setModal] = useState(null)
+  const [waReady, setWaReady] = useState(false)
+  useEffect(() => {
+    if (mode === 'api' && canEdit) waApi.status().then((s) => setWaReady(s.estado === 'open')).catch(() => {})
+  }, [mode, canEdit])
   const [filter, setFilter] = useState('porCobrar') // porCobrar | vencidas | proximas
 
   const clientOf = (id) => state.clients.find((c) => c.id === id)
@@ -103,15 +108,17 @@ export default function Recordatorios() {
           invoice={modal.invoice}
           client={modal.client}
           settings={state.settings}
+          waReady={waReady}
           onClose={() => setModal(null)}
           onLog={(reminder) => { dispatch({ type: 'reminder/add', reminder }); setModal(null) }}
+          onAutoSend={async (message) => { await waApi.sendReminder(modal.invoice.id, message); setModal(null) }}
         />
       )}
     </div>
   )
 }
 
-function ReminderForm({ invoice, client, settings, onClose, onLog }) {
+function ReminderForm({ invoice, client, settings, waReady, onClose, onLog, onAutoSend }) {
   const vars = {
     nombre: client?.contact || client?.name || '',
     numero: invoice.number,
@@ -120,6 +127,8 @@ function ReminderForm({ invoice, client, settings, onClose, onLog }) {
   }
   const [message, setMessage] = useState(fillTemplate(settings.reminderTemplate, vars))
   const [channel, setChannel] = useState('WhatsApp')
+  const [sending, setSending] = useState(false)
+  const [sendErr, setSendErr] = useState(null)
   const phone = (client?.phone || '').replace(/\D/g, '')
   const waUrl = phone ? `https://wa.me/${settings.countryCode}${phone}?text=${encodeURIComponent(message)}` : null
   const mailUrl = client?.email ? `mailto:${client.email}?subject=${encodeURIComponent('Recordatorio de pago ' + invoice.number)}&body=${encodeURIComponent(message)}` : null
@@ -140,8 +149,11 @@ function ReminderForm({ invoice, client, settings, onClose, onLog }) {
         </Field>
         <Field label="Mensaje"><textarea className="input" rows={5} value={message} onChange={(e) => setMessage(e.target.value)} /></Field>
         <div className="row wrap">
+          {channel === 'WhatsApp' && waReady && phone && (
+            <button type="button" className="btn btn-primary" disabled={sending} onClick={async () => { setSending(true); setSendErr(null); try { await onAutoSend(message) } catch (e) { setSendErr(e.message) } finally { setSending(false) } }}>{sending ? 'Enviando…' : 'Enviar desde el número de la firma'}</button>
+          )}
           {channel === 'WhatsApp' && (waUrl
-            ? <a className="btn btn-primary" href={waUrl} target="_blank" rel="noreferrer" onClick={log}>Abrir WhatsApp y registrar</a>
+            ? <a className={`btn ${waReady ? '' : 'btn-primary'}`} href={waUrl} target="_blank" rel="noreferrer" onClick={log}>Abrir WhatsApp y registrar</a>
             : <span className="note note-warn">Este cliente no tiene celular registrado.</span>)}
           {channel === 'Correo' && (mailUrl
             ? <a className="btn btn-primary" href={mailUrl} onClick={log}>Abrir correo y registrar</a>
@@ -149,6 +161,7 @@ function ReminderForm({ invoice, client, settings, onClose, onLog }) {
           <button type="button" className="btn" onClick={() => navigator.clipboard?.writeText(message)}>Copiar mensaje</button>
           <button type="button" className="btn" onClick={log}>Solo registrar que se hizo</button>
         </div>
+        {sendErr && <p className="note note-danger">{sendErr}</p>}
       </div>
     </Modal>
   )

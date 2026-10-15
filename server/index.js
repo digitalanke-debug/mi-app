@@ -2,18 +2,18 @@ import express from 'express'
 import cookieParser from 'cookie-parser'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { migrate, query, withState } from './db.js'
+import { migrate, query } from './db.js'
 import { ensureAdmin, requireAuth, requireAdmin, loginLimiter, setSession, clearSession, verifyPassword, hashPassword } from './auth.js'
-import { reducer, generateRecurring } from '../src/store/reducer.js'
-import { migrateState } from '../src/store/migrate.js'
 import { emptyState } from '../src/store/seed.js'
+import { readState, applyAction, isAllowedAction, isValidState } from './state.js'
+import { whatsappRouter, migrateWhatsApp } from './whatsapp.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const PORT = Number(process.env.PORT || 3000)
 const app = express()
 
 app.set('trust proxy', 1)
-app.use(express.json({ limit: '5mb' }))
+app.use(express.json({ limit: '30mb' }))
 app.use(cookieParser())
 
 // ---------- Autenticación ----------
@@ -90,41 +90,19 @@ app.patch('/api/users/:id', requireAuth, requireAdmin, async (req, res) => {
 
 // ---------- Estado y acciones ----------
 app.get('/api/state', requireAuth, async (req, res) => {
-  const out = await withState(async (row, client) => {
-    // Genera las cuentas de gastos fijos del periodo si hacen falta
-    const next = generateRecurring(row.data)
-    if (next !== row.data) {
-      const v = row.version + 1
-      await client.query('UPDATE app_state SET data = $1, version = $2, updated_at = now() WHERE id = 1', [next, v])
-      await client.query('INSERT INTO actions_log (user_id, user_email, action, version) VALUES ($1, $2, $3, $4)', [req.user.id, req.user.email, { type: 'recurring/generate' }, v])
-      return { state: next, version: v }
-    }
-    return { state: row.data, version: row.version }
-  })
-  res.json(out)
+  res.json(await readState(req.user))
 })
-
-const ALLOWED_PREFIX = ['client/', 'invoice/', 'expense/', 'recurring/', 'cash/', 'account/', 'reminder/', 'settings/']
 
 app.post('/api/actions', requireAuth, async (req, res) => {
   const action = req.body?.action
   if (!action || typeof action.type !== 'string') return res.status(400).json({ error: 'Acción no válida' })
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Tu usuario es de solo lectura' })
-  const isReplace = action.type === 'replace'
-  if (!isReplace && !ALLOWED_PREFIX.some((p) => action.type.startsWith(p))) return res.status(400).json({ error: `Acción no permitida: ${action.type}` })
-  if (isReplace && !isValidState(action.state)) return res.status(400).json({ error: 'El estado a restaurar no es válido' })
-
-  const out = await withState(async (row, client) => {
-    const next = isReplace ? generateRecurring(action.state) : reducer(migrateState(row.data), action)
-    const v = row.version + 1
-    await client.query('UPDATE app_state SET data = $1, version = $2, updated_at = now() WHERE id = 1', [next, v])
-    // En la bitácora no guardamos el estado completo de un "replace", solo que ocurrió
-    const logged = isReplace ? { type: 'replace', size: JSON.stringify(action.state).length } : action
-    await client.query('INSERT INTO actions_log (user_id, user_email, action, version) VALUES ($1, $2, $3, $4)', [req.user.id, req.user.email, logged, v])
-    return { state: next, version: v }
-  })
-  res.json(out)
+  if (action.type !== 'replace' && !isAllowedAction(action.type)) return res.status(400).json({ error: `Acción no permitida: ${action.type}` })
+  if (action.type === 'replace' && !isValidState(action.state)) return res.status(400).json({ error: 'El estado a restaurar no es válido' })
+  res.json(await applyAction(action, req.user))
 })
+
+app.use('/api/whatsapp', whatsappRouter())
 
 app.get('/api/log', requireAuth, requireAdmin, async (req, res) => {
   const limit = Math.min(500, Number(req.query.limit) || 100)
@@ -149,12 +127,9 @@ function publicUser(u) {
   return { id: u.id, email: u.email, name: u.name, role: u.role }
 }
 
-function isValidState(s) {
-  return s && typeof s === 'object' && Array.isArray(s.clients) && Array.isArray(s.invoices) && Array.isArray(s.expenses) && Array.isArray(s.recurring) && s.cash && Array.isArray(s.cash.movements) && s.settings
-}
-
 async function main() {
   await migrate()
+  await migrateWhatsApp()
   const r = await query('SELECT 1 FROM app_state WHERE id = 1')
   if (!r.rowCount) await query('INSERT INTO app_state (id, data, version) VALUES (1, $1, 0)', [emptyState()])
   await ensureAdmin()

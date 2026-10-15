@@ -38,11 +38,12 @@ export const evolution = {
     const r = await call('GET', `/instance/connectionState/${instance}`)
     return r?.instance?.state || r?.state || 'desconocido'
   },
-  async createInstance(webhookUrl) {
+  async createInstance(webhookUrl, number) {
     const { instance } = evolutionConfig()
     return call('POST', '/instance/create', {
       instanceName: instance,
       qrcode: true,
+      ...(number ? { number } : {}),
       integration: 'WHATSAPP-BAILEYS',
       webhook: { enabled: true, url: webhookUrl, byEvents: false, base64: true, events: ['MESSAGES_UPSERT'] },
     })

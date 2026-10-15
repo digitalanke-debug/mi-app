@@ -249,17 +249,27 @@ export function whatsappRouter() {
     try {
       let qr = null
       let pairingCode = null
+      if (state === 'open') {
+        await evolution.setWebhook(url)
+        return res.json({ estado: 'open', qr: null })
+      }
+      if (number && state) {
+        // El código de emparejamiento solo sale si la sesión arranca con el número: se reinicia la instancia
+        try { await evolution.logout() } catch { /* puede no estar conectada */ }
+        try { await evolution.deleteInstance() } catch { /* puede no existir */ }
+        await new Promise((r) => setTimeout(r, 1500))
+        state = null
+      }
       if (!state) {
-        const created = await evolution.createInstance(url)
+        const created = await evolution.createInstance(url, number || undefined)
         qr = pickQr(created)
         pairingCode = created?.qrcode?.pairingCode || null
       } else {
         await evolution.setWebhook(url)
-        if (state === 'open') return res.json({ estado: 'open', qr: null })
       }
       // Con número: pide código de emparejamiento de 8 letras. Sin número: QR. Puede tardar un momento.
-      for (let i = 0; i < 5 && (number ? !pairingCode : !qr); i++) {
-        await new Promise((r) => setTimeout(r, 1500))
+      for (let i = 0; i < 8 && (number ? !pairingCode : !qr); i++) {
+        await new Promise((r) => setTimeout(r, 2000))
         const r = await evolution.connect(number || undefined).catch(() => null)
         if (r?.instance?.state === 'open') return res.json({ estado: 'open', qr: null })
         qr = pickQr(r) || qr

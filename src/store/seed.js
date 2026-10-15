@@ -32,7 +32,7 @@ export function buildSeed() {
       id: uid('inv'), number: 'CC-2026-044', clientId: c2, issueDate: addDaysISO(hoy, -30), dueDate: addDaysISO(hoy, 5),
       concept: 'Proceso laboral - cuota 2 de 3',
       items: [{ desc: 'Honorarios proceso laboral (cuota 2/3)', kind: 'honorarios', amount: 2000000 }],
-      payments: [{ id: uid('pay'), date: addDaysISO(hoy, -10), amount: 800000, note: 'Abono transferencia' }], notes: '',
+      payments: [{ id: uid('pay'), date: addDaysISO(hoy, -10), amount: 800000, note: 'Abono transferencia', accountId: 'acc_davivienda' }], notes: '',
     },
     {
       id: uid('inv'), number: 'CC-2026-047', clientId: c3, issueDate: addDaysISO(hoy, -8), dueDate: addDaysISO(hoy, 22),
@@ -47,7 +47,7 @@ export function buildSeed() {
       id: uid('inv'), number: 'CC-2026-039', clientId: c4, issueDate: addDaysISO(hoy, -60), dueDate: addDaysISO(hoy, -30),
       concept: 'Sucesión - honorarios etapa 1',
       items: [{ desc: 'Honorarios sucesión etapa 1', kind: 'honorarios', amount: 3200000 }],
-      payments: [{ id: uid('pay'), date: addDaysISO(hoy, -28), amount: 3200000, note: 'Pago total' }], notes: '',
+      payments: [{ id: uid('pay'), date: addDaysISO(hoy, -28), amount: 3200000, note: 'Pago total', accountId: 'acc_bancolombia' }], notes: '',
     },
     {
       id: uid('inv'), number: 'CC-2026-048', clientId: c4, issueDate: addDaysISO(hoy, -3), dueDate: addDaysISO(hoy, 27),
@@ -76,18 +76,28 @@ export function buildSeed() {
     { id: uid('exp'), concept: 'Mantenimiento aire acondicionado', supplier: 'Climatec', category: 'Mantenimiento', amount: 220000, dueDate: addDaysISO(hoy, 35), status: 'pendiente', manualPriority: null, cutsService: false, hasInterest: false, notes: '' },
   ]
 
-  const initialBalance = 7050000
+  const accounts = [
+    { id: 'acc_bancolombia', name: 'Bancolombia', type: 'banco', active: true },
+    { id: 'acc_davivienda', name: 'Davivienda', type: 'banco', active: true },
+    { id: 'acc_caja', name: 'Caja menor', type: 'efectivo', active: true },
+    { id: 'acc_prestamo', name: 'Préstamo Bancolombia', type: 'prestamo', active: true },
+  ]
   const cash = {
     movements: [
-      { id: uid('mov'), date: addDaysISO(hoy, -40), type: 'ajuste', amount: initialBalance, description: 'Saldo inicial de la cuenta', ref: null },
-      { id: uid('mov'), date: addDaysISO(hoy, -28), type: 'ingreso', amount: 3200000, description: 'Pago María Fernanda Restrepo - CC-2026-039', ref: { kind: 'invoice', id: invoices[3].id } },
-      { id: uid('mov'), date: addDaysISO(hoy, -10), type: 'ingreso', amount: 800000, description: 'Abono Carlos Andrés Pérez - CC-2026-044', ref: { kind: 'invoice', id: invoices[1].id } },
+      { id: uid('mov'), date: addDaysISO(hoy, -40), type: 'ajuste', amount: 5250000, accountId: 'acc_bancolombia', description: 'Saldo inicial', ref: null },
+      { id: uid('mov'), date: addDaysISO(hoy, -40), type: 'ajuste', amount: 1800000, accountId: 'acc_davivienda', description: 'Saldo inicial', ref: null },
+      { id: uid('mov'), date: addDaysISO(hoy, -40), type: 'ajuste', amount: 350000, accountId: 'acc_caja', description: 'Saldo inicial', ref: null },
+      { id: uid('mov'), date: addDaysISO(hoy, -40), type: 'ajuste', amount: -4500000, accountId: 'acc_prestamo', description: 'Saldo inicial (deuda)', ref: null },
+      { id: uid('mov'), date: addDaysISO(hoy, -28), type: 'ingreso', amount: 3200000, accountId: 'acc_bancolombia', description: 'Pago María Fernanda Restrepo - CC-2026-039', ref: { kind: 'invoice', id: invoices[3].id } },
+      { id: uid('mov'), date: addDaysISO(hoy, -10), type: 'ingreso', amount: 800000, accountId: 'acc_davivienda', description: 'Abono Carlos Andrés Pérez - CC-2026-044', ref: { kind: 'invoice', id: invoices[1].id } },
     ],
   }
 
   return {
-    version: 1,
+    version: 2,
+    accounts,
     settings: {
+      whatsapp: { allowedNumbers: [], assistantName: 'Asistente S&Go' },
       firmName: 'S&Go Abogados',
       reminderTemplate:
         'Hola {nombre}, le escribimos de S&Go Abogados. Le recordamos que la cuenta de cobro {numero} por {valor} tiene fecha de vencimiento el {fecha}. Quedamos atentos a su pago. ¡Gracias!',
@@ -105,8 +115,10 @@ export function buildSeed() {
 
 export function emptyState() {
   return {
-    version: 1,
+    version: 2,
+    accounts: [{ id: 'acc_principal', name: 'Cuenta principal', type: 'banco', active: true }],
     settings: {
+      whatsapp: { allowedNumbers: [], assistantName: 'Asistente S&Go' },
       firmName: 'S&Go Abogados',
       reminderTemplate:
         'Hola {nombre}, le escribimos de S&Go Abogados. Le recordamos que la cuenta de cobro {numero} por {valor} tiene fecha de vencimiento el {fecha}. Quedamos atentos a su pago. ¡Gracias!',

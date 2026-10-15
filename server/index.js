@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { migrate, query, withState } from './db.js'
 import { ensureAdmin, requireAuth, requireAdmin, loginLimiter, setSession, clearSession, verifyPassword, hashPassword } from './auth.js'
 import { reducer, generateRecurring } from '../src/store/reducer.js'
+import { migrateState } from '../src/store/migrate.js'
 import { emptyState } from '../src/store/seed.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -103,7 +104,7 @@ app.get('/api/state', requireAuth, async (req, res) => {
   res.json(out)
 })
 
-const ALLOWED_PREFIX = ['client/', 'invoice/', 'expense/', 'recurring/', 'cash/', 'reminder/', 'settings/']
+const ALLOWED_PREFIX = ['client/', 'invoice/', 'expense/', 'recurring/', 'cash/', 'account/', 'reminder/', 'settings/']
 
 app.post('/api/actions', requireAuth, async (req, res) => {
   const action = req.body?.action
@@ -114,7 +115,7 @@ app.post('/api/actions', requireAuth, async (req, res) => {
   if (isReplace && !isValidState(action.state)) return res.status(400).json({ error: 'El estado a restaurar no es válido' })
 
   const out = await withState(async (row, client) => {
-    const next = isReplace ? generateRecurring(action.state) : reducer(row.data, action)
+    const next = isReplace ? generateRecurring(action.state) : reducer(migrateState(row.data), action)
     const v = row.version + 1
     await client.query('UPDATE app_state SET data = $1, version = $2, updated_at = now() WHERE id = 1', [next, v])
     // En la bitácora no guardamos el estado completo de un "replace", solo que ocurrió

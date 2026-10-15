@@ -4,11 +4,16 @@ import { cop, fmtDate, todayISO, addDaysISO, relativeDue } from '../lib/format.j
 import { computePriority, priorityReason, sortByPriority } from '../lib/priority.js'
 import { downloadCSV } from '../lib/csv.js'
 import { Modal, PriorityBadge, MoneyInput, Field, Empty, Confirm, StatusBadge } from '../components/ui.jsx'
+import { AccountSelect } from './Caja.jsx'
+import { defaultAccountId, totals, accountName } from '../lib/accounts.js'
 
 const CATEGORIES = ['Arriendo', 'Servicios', 'Nómina', 'Honorarios', 'Software', 'Oficina', 'Gastos de procesos', 'Impuestos', 'Financiero', 'Mantenimiento', 'Otros']
 
 export default function CuentasPorPagar() {
-  const { state, dispatch, balance } = useStore()
+  const { state, dispatch } = useStore()
+  const [accountId, setAccountId] = useState(() => defaultAccountId(state))
+  const t = totals(state)
+  const balance = t.porCuenta[accountId] || 0
   const [tab, setTab] = useState('pendientes') // pendientes | pagadas | fijos
   const [selected, setSelected] = useState(() => new Set())
   const [expenseModal, setExpenseModal] = useState(null)
@@ -49,7 +54,7 @@ export default function CuentasPorPagar() {
     setSelected(n)
   }
   function pagarSeleccionados() {
-    dispatch({ type: 'expense/pay', ids: [...selected], date: payDate })
+    dispatch({ type: 'expense/pay', ids: [...selected], date: payDate, accountId })
     setSelected(new Set())
     setConfirm(null)
   }
@@ -132,7 +137,8 @@ export default function CuentasPorPagar() {
           <aside className="card calc">
             <h2>Calculadora de pagos</h2>
             <p className="muted small">Marca lo que vas a pagar y mira cómo queda la cuenta.</p>
-            <div className="calc-row"><span>Saldo actual</span><strong>{cop(balance)}</strong></div>
+            <Field label="Pagar desde"><AccountSelect accounts={state.accounts} balances={t.porCuenta} value={accountId} onChange={setAccountId} excludeLoans /></Field>
+            <div className="calc-row"><span>Saldo de la cuenta</span><strong>{cop(balance)}</strong></div>
             <div className="calc-row"><span>Seleccionado ({selectedList.length})</span><strong className="text-danger">− {cop(totalSel)}</strong></div>
             <div className={`calc-row calc-total ${restante < 0 ? 'text-danger' : 'text-ok'}`}><span>Quedaría</span><strong>{cop(restante)}</strong></div>
             {restante < 0 && <p className="note note-danger">No alcanza: faltan {cop(-restante)}.</p>}
@@ -158,7 +164,7 @@ export default function CuentasPorPagar() {
               type="button"
               className="btn btn-primary btn-block"
               disabled={selectedList.length === 0}
-              onClick={() => setConfirm({ text: `¿Registrar el pago de ${selectedList.length} cuenta${selectedList.length === 1 ? '' : 's'} por ${cop(totalSel)}? Se descontará del saldo.`, onYes: pagarSeleccionados })}
+              onClick={() => setConfirm({ text: `¿Registrar el pago de ${selectedList.length} cuenta${selectedList.length === 1 ? '' : 's'} por ${cop(totalSel)} desde ${accountName(state, accountId)}? Se descontará de esa cuenta.`, onYes: pagarSeleccionados })}
             >
               Registrar pago de {cop(totalSel)}
             </button>
@@ -178,7 +184,7 @@ export default function CuentasPorPagar() {
                   <tr key={e.id}>
                     <td><strong>{e.concept}</strong><div className="muted small">{e.supplier}</div></td>
                     <td>{fmtDate(e.dueDate)}</td>
-                    <td>{fmtDate(e.paidAt)} <StatusBadge status="pagado" /></td>
+                    <td>{fmtDate(e.paidAt)} <StatusBadge status="pagado" />{e.paidFromAccountId && <div className="muted small">desde {accountName(state, e.paidFromAccountId)}</div>}</td>
                     <td className="num">{cop(e.amount)}</td>
                     <td className="actions"><button type="button" className="btn btn-sm" onClick={() => setConfirm({ text: `¿Deshacer el pago de "${e.concept}"? Volverá a pendiente y se devolverá ${cop(e.amount)} al saldo.`, onYes: () => { dispatch({ type: 'expense/unpay', id: e.id }); setConfirm(null) } })}>Deshacer</button></td>
                   </tr>

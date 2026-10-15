@@ -3,9 +3,12 @@ import { cop, daysUntil, fmtDateShort, relativeDue, todayISO, addDaysISO } from 
 import { computePriority, sortByPriority } from '../lib/priority.js'
 import { agingBuckets, invoiceBalance, invoiceStatus } from '../lib/invoices.js'
 import { Kpi, PriorityBadge, Empty } from '../components/ui.jsx'
+import { totals, isLoan } from '../lib/accounts.js'
 
 export default function Dashboard({ go }) {
   const { state, balance } = useStore()
+  const t = totals(state)
+  const activeAccounts = state.accounts.filter((a) => a.active)
   const hoy = todayISO()
   const en30 = addDaysISO(hoy, 30)
 
@@ -41,7 +44,7 @@ export default function Dashboard({ go }) {
       </header>
 
       <section className="kpis">
-        <Kpi label="Saldo en cuenta" value={cop(balance)} tone={balance < 0 ? 'danger' : 'primary'} hint="Lo que hay hoy" />
+        <Kpi label="Saldo disponible" value={cop(balance)} tone={balance < 0 ? 'danger' : 'primary'} hint={t.deudas > 0 ? `Deudas: ${cop(t.deudas)} · Neto: ${cop(t.neto)}` : `En ${activeAccounts.length} cuenta${activeAccounts.length === 1 ? '' : 's'}`} />
         <Kpi label="Por cobrar a clientes" value={cop(porCobrar)} hint={totalVencido > 0 ? `${cop(totalVencido)} vencido` : 'Nada vencido'} tone={totalVencido > 0 ? 'warn' : undefined} />
         <Kpi label="Por pagar (30 días)" value={cop(porPagar30)} hint={`${prioritarias.length} prioritaria${prioritarias.length === 1 ? '' : 's'} por ${cop(totalPrioritarias)}`} tone={prioritarias.length ? 'danger' : undefined} />
         <Kpi
@@ -51,6 +54,15 @@ export default function Dashboard({ go }) {
           tone={proyeccion < 0 ? 'danger' : 'ok'}
         />
       </section>
+
+      {activeAccounts.length > 1 && (
+        <div className="account-strip">
+          {activeAccounts.map((a) => (
+            <span key={a.id} className={isLoan(a) ? 'text-danger' : ''}>{a.name}: <strong>{isLoan(a) ? `debe ${cop(Math.max(0, -(t.porCuenta[a.id] || 0)))}` : cop(t.porCuenta[a.id] || 0)}</strong></span>
+          ))}
+          <button type="button" className="btn btn-link btn-sm" onClick={() => go('caja')}>Ver caja</button>
+        </div>
+      )}
 
       <div className="grid-2">
         <section className="card">

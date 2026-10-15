@@ -1,18 +1,18 @@
 import { monthKey, todayISO, uid } from '../lib/format.js'
+import { migrateState } from './migrate.js'
+import { defaultAccountId, totals } from '../lib/accounts.js'
 
+/** Saldo disponible consolidado (todas las cuentas activas que no son préstamo) */
 export function cashBalance(state) {
-  return state.cash.movements.reduce((s, m) => {
-    if (m.type === 'ingreso' || m.type === 'ajuste') return s + m.amount
-    if (m.type === 'egreso') return s - m.amount
-    return s
-  }, 0)
+  return totals(state).disponible
 }
 
 /**
  * Genera las cuentas por pagar del mes actual y del siguiente a partir de
  * los gastos fijos recurrentes que aún no tengan registro para ese periodo.
  */
-export function generateRecurring(state, today = todayISO()) {
+export function generateRecurring(input, today = todayISO()) {
+  const state = migrateState(input)
   const [y, m] = today.split('-').map(Number)
   const periods = [
     { y, m },
@@ -93,12 +93,14 @@ export function reducer(state, action) {
       const inv = state.invoices.find((i) => i.id === action.id)
       if (!inv) return state
       const client = state.clients.find((c) => c.id === inv.clientId)
-      const payment = { id: uid('pay'), date: action.date, amount: action.amount, note: action.note || '' }
+      const accountId = action.accountId || defaultAccountId(state)
+      const payment = { id: uid('pay'), date: action.date, amount: action.amount, note: action.note || '', accountId }
       const movement = {
         id: uid('mov'),
         date: action.date,
         type: 'ingreso',
         amount: action.amount,
+        accountId,
         description: `Pago ${client?.name ?? 'cliente'} - ${inv.number}`,
         ref: { kind: 'invoice', id: inv.id },
       }
@@ -129,6 +131,7 @@ export function reducer(state, action) {
       // Marca una o varias cuentas como pagadas y descuenta de caja
       const ids = new Set(action.ids)
       const date = action.date || todayISO()
+      const accountId = action.accountId || defaultAccountId(state)
       const movements = []
       const expenses = state.expenses.map((e) => {
         if (!ids.has(e.id) || e.status === 'pagado') return e
@@ -137,10 +140,11 @@ export function reducer(state, action) {
           date,
           type: 'egreso',
           amount: e.amount,
+          accountId,
           description: `Pago ${e.concept}${e.supplier ? ' - ' + e.supplier : ''}`,
           ref: { kind: 'expense', id: e.id },
         })
-        return { ...e, status: 'pagado', paidAt: date }
+        return { ...e, status: 'pagado', paidAt: date, paidFromAccountId: accountId }
       })
       return { ...state, expenses, cash: { ...state.cash, movements: [...state.cash.movements, ...movements] } }
     }
@@ -180,15 +184,19 @@ export function reducer(state, action) {
         ...state,
         cash: {
           ...state.cash,
-          movements: [...state.cash.movements, { id: uid('mov'), ref: null, ...action.movement }],
+          movements: [...state.cash.movements, { id: uid('mov'), ref: null, accountId: defaultAccountId(state), ...action.movement }],
         },
       }
     case 'cash/remove':
       return { ...state, cash: { ...state.cash, movements: state.cash.movements.filter((m) => m.id !== action.id) } }
     case 'cash/setBalance': {
-      // Crea un ajuste para que el saldo quede exactamente en el valor indicado
-      const current = cashBalance(state)
-      const diff = action.balance - current
+      // Crea un ajuste para que el saldo de la cuenta quede exactamente en el valor indicado.
+      // En préstamos el "saldo" se expresa como deuda (positiva) y se guarda en negativo.
+      const accountId = action.accountId || defaultAccountId(state)
+      const account = state.accounts.find((a) => a.id === accountId)
+      const target = account?.type === 'prestamo' ? -Math.abs(action.balance) : action.balance
+      const current = totals(state).porCuenta[accountId] || 0
+      const diff = target - current
       if (diff === 0) return state
       return {
         ...state,
@@ -196,10 +204,56 @@ export function reducer(state, action) {
           ...state.cash,
           movements: [
             ...state.cash.movements,
-            { id: uid('mov'), date: todayISO(), type: 'ajuste', amount: diff, description: action.description || 'Ajuste de saldo', ref: null },
+            { id: uid('mov'), date: action.date || todayISO(), type: 'ajuste', amount: diff, accountId, description: action.description || 'Ajuste de saldo', ref: null },
           ],
         },
       }
+    }
+    case 'cash/transfer': {
+      // Traslado entre cuentas: egreso en origen, ingreso en destino. Un abono a préstamo es un traslado banco -> préstamo.
+      if (!action.fromId || !action.toId || action.fromId === action.toId || !(action.amount > 0)) return state
+      const tid = uid('trf')
+      const date = action.date || todayISO()
+      const from = state.accounts.find((a) => a.id === action.fromId)?.name ?? 'cuenta'
+      const to = state.accounts.find((a) => a.id === action.toId)?.name ?? 'cuenta'
+      const desc = action.description || `Traslado ${from} → ${to}`
+      return {
+        ...state,
+        cash: {
+          ...state.cash,
+          movements: [
+            ...state.cash.movements,
+            { id: uid('mov'), date, type: 'egreso', amount: action.amount, accountId: action.fromId, description: desc, ref: { kind: 'transfer', id: tid } },
+            { id: uid('mov'), date, type: 'ingreso', amount: action.amount, accountId: action.toId, description: desc, ref: { kind: 'transfer', id: tid } },
+          ],
+        },
+      }
+    }
+    case 'cash/removeTransfer':
+      return { ...state, cash: { ...state.cash, movements: state.cash.movements.filter((m) => !(m.ref?.kind === 'transfer' && m.ref.id === action.id)) } }
+
+    // ---------- Cuentas (bancos, caja menor, préstamos) ----------
+    case 'account/add': {
+      const id = uid('acc')
+      const account = { id, active: true, type: 'banco', ...action.account }
+      let next = { ...state, accounts: [...state.accounts, account] }
+      const initial = Number(action.initialBalance) || 0
+      if (initial) {
+        const amount = account.type === 'prestamo' ? -Math.abs(initial) : initial
+        next = {
+          ...next,
+          cash: { ...next.cash, movements: [...next.cash.movements, { id: uid('mov'), date: todayISO(), type: 'ajuste', amount, accountId: id, description: 'Saldo inicial', ref: null }] },
+        }
+      }
+      return next
+    }
+    case 'account/update':
+      return { ...state, accounts: state.accounts.map((a) => (a.id === action.id ? { ...a, ...action.account } : a)) }
+    case 'account/remove': {
+      // Solo se elimina si no tiene movimientos; si los tiene, se desactiva.
+      const has = state.cash.movements.some((m) => m.accountId === action.id)
+      if (has || state.accounts.length <= 1) return { ...state, accounts: state.accounts.map((a) => (a.id === action.id ? { ...a, active: false } : a)) }
+      return { ...state, accounts: state.accounts.filter((a) => a.id !== action.id) }
     }
 
     // ---------- Recordatorios ----------

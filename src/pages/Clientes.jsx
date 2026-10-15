@@ -4,6 +4,8 @@ import { cop, fmtDate, todayISO, addDaysISO, relativeDue } from '../lib/format.j
 import { invoiceBalance, invoicePaid, invoiceStatus, invoiceTotal, clientBalance, clientOverdue } from '../lib/invoices.js'
 import { downloadCSV } from '../lib/csv.js'
 import { Modal, StatusBadge, MoneyInput, Field, Empty, Confirm } from '../components/ui.jsx'
+import { AccountSelect } from './Caja.jsx'
+import { defaultAccountId, totals, accountName } from '../lib/accounts.js'
 
 const blankClient = { name: '', nit: '', phone: '', email: '', contact: '', notes: '' }
 
@@ -169,6 +171,7 @@ export default function Clientes() {
       {invoiceModal && (
         <InvoiceForm
           clients={state.clients}
+          accounts={state.accounts}
           initial={invoiceModal.invoice}
           clientId={invoiceModal.clientId}
           onClose={() => setInvoiceModal(null)}
@@ -184,9 +187,12 @@ export default function Clientes() {
       {paymentModal && (
         <PaymentForm
           invoice={paymentModal}
+          accounts={state.accounts}
+          balances={totals(state).porCuenta}
+          defaultAccountId={defaultAccountId(state)}
           onClose={() => setPaymentModal(null)}
-          onSave={({ amount, date, note }) => {
-            dispatch({ type: 'invoice/payment', id: paymentModal.id, amount, date, note })
+          onSave={({ amount, date, note, accountId }) => {
+            dispatch({ type: 'invoice/payment', id: paymentModal.id, amount, date, note, accountId })
             setPaymentModal(null)
           }}
         />
@@ -222,7 +228,7 @@ function ClientForm({ initial, onClose, onSave }) {
   )
 }
 
-function InvoiceForm({ clients, initial, clientId, onClose, onSave, onDelete }) {
+function InvoiceForm({ clients, accounts, initial, clientId, onClose, onSave, onDelete }) {
   const hoy = todayISO()
   const [f, setF] = useState(
     initial
@@ -276,7 +282,7 @@ function InvoiceForm({ clients, initial, clientId, onClose, onSave, onDelete }) 
           <div className="payments">
             <h3>Abonos registrados ({cop(paid)})</h3>
             <ul>
-              {initial.payments.map((p) => <li key={p.id}>{fmtDate(p.date)} · {cop(p.amount)} {p.note && <span className="muted">· {p.note}</span>}</li>)}
+              {initial.payments.map((p) => <li key={p.id}>{fmtDate(p.date)} · {cop(p.amount)} {p.accountId && <span className="muted">· {accountName({ accounts }, p.accountId)}</span>}{p.note && <span className="muted">· {p.note}</span>}</li>)}
             </ul>
           </div>
         )}
@@ -294,19 +300,21 @@ function InvoiceForm({ clients, initial, clientId, onClose, onSave, onDelete }) 
   )
 }
 
-function PaymentForm({ invoice, onClose, onSave }) {
+function PaymentForm({ invoice, accounts, balances, defaultAccountId: defId, onClose, onSave }) {
   const balance = invoiceBalance(invoice)
   const [amount, setAmount] = useState(balance)
   const [date, setDate] = useState(todayISO())
   const [note, setNote] = useState('')
+  const [accountId, setAccountId] = useState(defId)
   return (
     <Modal title={`Registrar pago · ${invoice.number}`} onClose={onClose}>
-      <form className="form" onSubmit={(e) => { e.preventDefault(); if (amount > 0) onSave({ amount, date, note }) }}>
-        <p className="muted">Saldo pendiente: <strong>{cop(balance)}</strong>. El pago se suma automáticamente al saldo de la cuenta.</p>
+      <form className="form" onSubmit={(e) => { e.preventDefault(); if (amount > 0) onSave({ amount, date, note, accountId }) }}>
+        <p className="muted">Saldo pendiente: <strong>{cop(balance)}</strong>. El pago se suma automáticamente a la cuenta que elijas.</p>
         <div className="form-row">
           <Field label="Valor recibido"><MoneyInput value={amount} onChange={setAmount} autoFocus /></Field>
           <Field label="Fecha"><input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
         </div>
+        <Field label="Entra a la cuenta"><AccountSelect accounts={accounts} balances={balances} value={accountId} onChange={setAccountId} excludeLoans /></Field>
         <Field label="Nota"><input className="input" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ej: Transferencia Bancolombia" /></Field>
         {amount > balance && <p className="note note-warn">El valor supera el saldo. Se registrará como pago en exceso.</p>}
         <div className="row-end">

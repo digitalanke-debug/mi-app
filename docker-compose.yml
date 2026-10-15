@@ -35,8 +35,12 @@ services:
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-opus-5-5}
       TRANSCRIBE_URL: ${TRANSCRIBE_URL:-}
     extra_hosts:
-      # Permite llegar a servicios que corren en el servidor (Evolution API del CRM) con host.docker.internal
+      # Permite llegar a servicios que corren en el servidor con host.docker.internal
       - "host.docker.internal:host-gateway"
+    networks:
+      - default
+      # Red del CRM donde vive Evolution API (configurar-whatsapp.sh la detecta). Si no hay, usa "bridge".
+      - evolution
     depends_on:
       db:
         condition: service_healthy
@@ -83,6 +87,11 @@ services:
       - caddyconfig:/config
     depends_on:
       - app
+
+networks:
+  evolution:
+    external: true
+    name: ${EVOLUTION_NETWORK:-bridge}
 
 volumes:
   dbdata:

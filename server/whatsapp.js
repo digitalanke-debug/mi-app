@@ -213,7 +213,9 @@ export function whatsappRouter() {
         out.estado = await evolution.connectionState()
       } catch (e) {
         out.estado = e.status === 404 ? 'sin instancia' : 'error'
-        out.detalle = e.message
+        out.detalle = /ECONNREFUSED|ENOTFOUND|fetch failed|timeout/i.test(e.message)
+          ? `La app no logra conectarse con Evolution API en ${cfg.url}. En el servidor ejecuta: bash deploy/configurar-whatsapp.sh`
+          : e.message
       }
     }
     res.json(out)
@@ -232,18 +234,32 @@ export function whatsappRouter() {
       if (e.status !== 404) return res.status(502).json({ error: e.message })
       state = null
     }
+    const pickQr = (r) => r?.base64 || r?.qrcode?.base64 || null
     try {
+      let qr = null
+      let pairingCode = null
       if (!state) {
         const created = await evolution.createInstance(url)
-        const qr = created?.qrcode?.base64 || null
-        return res.json({ estado: 'connecting', qr })
+        qr = pickQr(created)
+        pairingCode = created?.qrcode?.pairingCode || null
+      } else {
+        await evolution.setWebhook(url)
+        if (state === 'open') return res.json({ estado: 'open', qr: null })
       }
-      await evolution.setWebhook(url)
-      if (state === 'open') return res.json({ estado: 'open', qr: null })
-      const r = await evolution.connect()
-      return res.json({ estado: r?.instance?.state || 'connecting', qr: r?.base64 || r?.qrcode?.base64 || null, pairingCode: r?.pairingCode || null })
+      // El QR puede tardar un momento en generarse: reintenta unas veces
+      for (let i = 0; i < 4 && !qr; i++) {
+        await new Promise((r) => setTimeout(r, 1500))
+        const r = await evolution.connect().catch(() => null)
+        if (r?.instance?.state === 'open') return res.json({ estado: 'open', qr: null })
+        qr = pickQr(r)
+        pairingCode = r?.pairingCode || pairingCode
+      }
+      return res.json({ estado: 'connecting', qr, pairingCode, detalle: qr ? null : 'Evolution no devolvió el código QR todavía. Pulsa "Generar otro código".' })
     } catch (e) {
-      return res.status(502).json({ error: e.message })
+      const hint = /ECONNREFUSED|ENOTFOUND|fetch failed|timeout/i.test(e.message)
+        ? ' La app no logra conectarse con Evolution API: revisa EVOLUTION_URL y EVOLUTION_NETWORK en el servidor (bash deploy/configurar-whatsapp.sh).'
+        : ''
+      return res.status(502).json({ error: e.message + hint })
     }
   })
 

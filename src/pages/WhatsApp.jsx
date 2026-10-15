@@ -46,6 +46,7 @@ export default function WhatsApp() {
       const r = await waApi.connect()
       setQr(r.qr)
       setPairingCode(r.pairingCode || null)
+      if (r.detalle) setErr(r.detalle)
       await refresh()
     } catch (e) {
       setErr(e.message)
@@ -105,6 +106,7 @@ export default function WhatsApp() {
           {status && !status.evolution && (
             <p className="note note-warn">El servidor aún no tiene la conexión con Evolution API. Hay que ejecutar en el servidor: <code>cd /opt/sigo-admin && bash deploy/configurar-whatsapp.sh</code></p>
           )}
+          {status?.detalle && <p className="note note-danger">{status.detalle}</p>}
           {status?.evolution && !conectado && (
             <>
               <p className="muted small">Vincula el número dedicado como si fuera "WhatsApp Web": en el celular abre WhatsApp → Dispositivos vinculados → Vincular dispositivo, y escanea el código.</p>

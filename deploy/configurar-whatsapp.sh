@@ -19,11 +19,24 @@ if [ -n "$EVO_CONTAINER" ]; then
   EVO_PORT=$(docker port "$EVO_CONTAINER" 8080/tcp 2>/dev/null | head -1 | sed 's/.*://')
   echo "Encontrado: $EVO_CONTAINER (puerto ${EVO_PORT:-?})"
 fi
-if [ -n "$EVO_KEY" ] && [ -n "$EVO_PORT" ]; then
-  setvar EVOLUTION_URL "http://host.docker.internal:$EVO_PORT"
+EVO_NET=""
+if [ -n "$EVO_CONTAINER" ]; then
+  EVO_NET=$(docker inspect "$EVO_CONTAINER" -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}}{{"\n"}}{{end}}' 2>/dev/null | grep -v '^bridge$' | head -1 || true)
+fi
+if [ -n "$EVO_KEY" ] && [ -n "$EVO_CONTAINER" ]; then
+  if [ -n "$EVO_NET" ]; then
+    # La app se une a la red del CRM y habla con Evolution por su nombre de contenedor
+    setvar EVOLUTION_NETWORK "$EVO_NET"
+    setvar EVOLUTION_URL "http://$EVO_CONTAINER:8080"
+    echo "Red de Evolution: $EVO_NET (la app se conectará a ella)"
+  else
+    setvar EVOLUTION_NETWORK "bridge"
+    setvar EVOLUTION_URL "http://host.docker.internal:${EVO_PORT:-8080}"
+  fi
   setvar EVOLUTION_API_KEY "$EVO_KEY"
-  echo "Clave y puerto de Evolution tomados automáticamente."
+  echo "Clave de Evolution tomada automáticamente."
 else
+  setvar EVOLUTION_NETWORK "bridge"
   read -r -p "Dirección de Evolution API [http://host.docker.internal:8080]: " U
   setvar EVOLUTION_URL "${U:-http://host.docker.internal:8080}"
   read -r -s -p "Clave (AUTHENTICATION_API_KEY) de Evolution API: " K; echo
@@ -51,5 +64,15 @@ if [ "${V:-s}" = "n" ] || [ "${V:-s}" = "N" ]; then setvar VOICE_NOTES false; se
 
 say "Aplicando"
 bash deploy/deploy.sh
+
+say "Comprobando que la app llega a Evolution API"
+EURL=$(getvar EVOLUTION_URL)
+EKEY=$(getvar EVOLUTION_API_KEY)
+sleep 3
+if docker compose exec -T app wget -qO- --timeout=10 --header "apikey: $EKEY" "$EURL/instance/fetchInstances" >/dev/null 2>&1; then
+  echo "Conexión con Evolution API correcta."
+else
+  echo "La app NO pudo conectarse a $EURL. Revisa EVOLUTION_URL y EVOLUTION_NETWORK en .env"
+fi
 echo
 echo "Listo. Entra a la app, menú 'Asistente WhatsApp', y vincula el número con el código QR."

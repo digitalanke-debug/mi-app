@@ -8,6 +8,7 @@ git pull --ff-only
 ensure() { grep -q "^$1=" .env 2>/dev/null || echo "$1=$2" >> .env; }
 ensure WHATSAPP_WEBHOOK_SECRET "$(openssl rand -hex 24)"
 ensure EVOLUTION_INSTANCE "sygo-admin"
+ensure EVOLUTION_NETWORK "bridge"
 ensure VOICE_NOTES "false"
 ensure TRANSCRIBE_URL ""
 

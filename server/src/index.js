@@ -26,6 +26,8 @@ import { syncWhatsappContacts } from './services/contactSync.js'
 import { startDemoSimulator } from './services/demoSimulator.js'
 
 const app = express()
+const here = path.dirname(fileURLToPath(import.meta.url))
+const dist = path.join(here, '..', '..', 'client', 'dist')
 // Los archivos adjuntos requieren sesión: cabecera Bearer o ?t=<token> (para <img src>)
 async function requireAuthOrToken(req, res, next) {
   const header = req.headers.authorization || ''
@@ -41,6 +43,12 @@ app.use(express.json({ limit: '30mb', verify: (req, res, buf) => { if (req.origi
 app.use('/uploads', requireAuthOrToken, express.static(UPLOAD_DIR, { maxAge: '7d', index: false }))
 
 app.get('/api/health', (req, res) => res.json({ ok: true, provider: config.whatsappProvider, db: config.dbClient }))
+// Versión de la web publicada (la escribe la compilación del cliente); el navegador la consulta para avisar que hay una nueva
+let buildId = null
+app.get('/api/version', (req, res) => {
+  if (!buildId) { try { buildId = JSON.parse(fs.readFileSync(path.join(dist, 'version.json'), 'utf8')).build } catch {} }
+  res.set('Cache-Control', 'no-store').json({ build: buildId })
+})
 app.use('/api/auth', authRouter)
 app.use('/api/whatsapp', whatsappRouter) // incluye webhooks públicos
 app.use('/api/companies', requireAuth, companiesRouter)
@@ -51,11 +59,11 @@ app.use('/api/broadcasts', requireAuth, broadcastsRouter)
 app.use('/api', requireAuth, settingsRouter)
 
 // En producción sirve el build del cliente desde el mismo proceso
-const here = path.dirname(fileURLToPath(import.meta.url))
-const dist = path.join(here, '..', '..', 'client', 'dist')
 if (fs.existsSync(dist)) {
-  app.use(express.static(dist))
-  app.get(/^\/(?!api|socket\.io).*/, (req, res) => res.sendFile(path.join(dist, 'index.html')))
+  // index.html sin caché (siempre apunta a la versión vigente); los archivos con huella en /assets sí se guardan
+  const noCacheHtml = (res, file) => { if (file.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache') }
+  app.use(express.static(dist, { setHeaders: noCacheHtml }))
+  app.get(/^\/(?!api|socket\.io).*/, (req, res) => res.sendFile(path.join(dist, 'index.html'), { headers: { 'Cache-Control': 'no-cache' } }))
 }
 
 app.use((err, req, res, next) => {

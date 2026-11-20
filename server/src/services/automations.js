@@ -2,17 +2,11 @@ import { db, now } from '../db/knex.js'
 import { emitCompany } from './realtime.js'
 import { sendOutbound, addTagByName, moveToStageByName, assignRoundRobin, logActivity, broadcastConversation } from './conversations.js'
 import { agentReply } from './ai.js'
+import { sendMenu } from './menu.js'
+import { isOutsideHours, fillVars } from './businessHours.js'
 
 const parse = (s, d) => { try { return s ? JSON.parse(s) : d } catch { return d } }
 
-function isOutsideHours(company) {
-  const [start, end] = (company.business_hours || '08:00-18:00').split('-')
-  const fmt = new Intl.DateTimeFormat('es-CO', { timeZone: company.timezone || 'America/Bogota', hour: '2-digit', minute: '2-digit', hour12: false, weekday: 'short' })
-  const parts = Object.fromEntries(fmt.formatToParts(new Date()).map((p) => [p.type, p.value]))
-  const hhmm = `${parts.hour}:${parts.minute}`
-  const weekend = /^(s[aá]b|dom)/i.test(parts.weekday)
-  return weekend || hhmm < start || hhmm >= end
-}
 
 function matches(auto, ctx) {
   const cond = parse(auto.conditions, {})
@@ -33,7 +27,7 @@ export async function runActions(auto, ctx) {
   for (const a of actions) {
     try {
       if (a.type === 'reply') {
-        await sendOutbound(conv.id, { body: a.body, senderType: 'bot' })
+        await sendOutbound(conv.id, { body: fillVars(a.body, ctx.company), senderType: 'bot' })
       } else if (a.type === 'add_tag') {
         await addTagByName(conv.id, conv.company_id, a.tag_name)
       } else if (a.type === 'move_stage') {
@@ -43,6 +37,8 @@ export async function runActions(auto, ctx) {
         else if (a.user_id) await db('conversations').where({ id: conv.id }).update({ assigned_user_id: a.user_id })
       } else if (a.type === 'notify') {
         emitCompany(conv.company_id, 'notification', { conversation_id: conv.id, body: a.body, automation: auto.name })
+      } else if (a.type === 'menu') {
+        await sendMenu(conv.id, a, ctx.company)
       } else if (a.type === 'ai_reply') {
         await aiRespond(conv.id, ctx)
       }
@@ -92,8 +88,10 @@ export async function fire(trigger, ctx) {
     if (!matches(auto, ctx)) continue
     // El aviso de fuera de horario se envía una sola vez cada 12 horas por chat (no en cada mensaje)
     if (trigger === 'outside_hours') {
-      const recent = await db('activity_log').where({ conversation_id: ctx.conversation.id, type: 'automation.run' })
-        .where('created_at', '>', new Date(Date.now() - 12 * 3600_000).toISOString()).whereLike('data', `%"trigger":"outside_hours"%`).first()
+      // Una sola vez cada 12 horas por chat; el menú de bienvenida enviado fuera de horario ya cuenta como aviso
+      const recent = await db('activity_log').where({ conversation_id: ctx.conversation.id })
+        .where('created_at', '>', new Date(Date.now() - 12 * 3600_000).toISOString())
+        .where((b) => b.where('type', 'outside_hours.notice').orWhere((w) => w.where('type', 'automation.run').whereLike('data', `%"trigger":"outside_hours"%`))).first()
       if (recent) continue
     }
     await runActions(auto, { ...ctx, conditions: parse(auto.conditions, {}) })

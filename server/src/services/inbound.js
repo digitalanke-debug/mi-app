@@ -5,6 +5,7 @@ import { fire } from './automations.js'
 import { saveMedia } from './media.js'
 import { providerFor } from './whatsapp/index.js'
 import { recordAdReferral } from './adReferrals.js'
+import { handleMenuReply } from './menu.js'
 import { findContactByLid, setContactPhone, resolveHiddenPhone } from './contactIdentity.js'
 
 /**
@@ -92,6 +93,12 @@ export async function handleInbound(inst, { phone, name, body, type = 'text', wa
   }
   emitCompany(company.id, 'message:new', { ...message, company_id: company.id })
   emitCompany(company.id, 'conversation:update', await loadConversation(conv.id))
+
+  // Respuesta al menú de bienvenida (1, 2, 3… o una palabra clave)
+  if (!isNew && conv.menu_state) {
+    try { await handleMenuReply(conv, message); conv = await db('conversations').where({ id: conv.id }).first() }
+    catch (e) { console.error('Menú de bienvenida:', e.message) }
+  }
 
   const ctx = { company, conversation: conv, contact, message, instance: inst }
   if (isNew) await fire('new_conversation', ctx)

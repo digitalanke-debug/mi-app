@@ -118,7 +118,7 @@ marketingRouter.get('/ads', requireCompany, async (req, res) => {
   const cid = req.companyId
   const refs = await db('ad_referrals as r').join('conversations as c', 'c.id', 'r.conversation_id').leftJoin('pipeline_stages as s', 's.id', 'c.stage_id')
     .where('r.company_id', cid).where('r.created_at', '>=', since).orderBy('r.created_at', 'desc')
-    .select('r.*', 'c.status', 'c.value', 'c.first_response_at', 's.is_won', 's.is_lost', 's.name as stage_name')
+    .select('r.*', 'c.status', 'c.value', 'c.service', 'c.first_response_at', 's.is_won', 's.is_lost', 's.name as stage_name')
   const convIds = [...new Set(refs.map((r) => r.conversation_id))]
   // Personas que siguieron la conversación (más de un mensaje): mide la calidad del lead
   const inbound = convIds.length ? await db('messages').whereIn('conversation_id', convIds).where({ direction: 'in' }).groupBy('conversation_id').select('conversation_id').count('id as n') : []
@@ -150,17 +150,20 @@ marketingRouter.get('/ads', requireCompany, async (req, res) => {
     const n = names[a.source_id] || m
     const stages = {}
     for (const c of list) stages[c.stage_name || 'Sin etapa'] = (stages[c.stage_name || 'Sin etapa'] || 0) + 1
+    const services = {} // servicio que eligieron en el menú o que el asesor anotó
+    for (const c of list) if (c.service) services[c.service] = (services[c.service] || 0) + 1
     return { ...a, ad_name: n?.ad_name || null, adset_name: n?.adset_name || null, campaign_name: n?.campaign_name || null,
       leads, engaged: list.filter((c) => (inboundOf[c.conversation_id] || 0) >= 2).length, answered: list.filter((c) => c.first_response_at).length,
       won, lost: list.filter((c) => c.is_lost).length, open: list.filter((c) => c.status !== 'closed' && !c.is_won && !c.is_lost).length,
       value_won: list.filter((c) => c.is_won).reduce((x, c) => x + Number(c.value || 0), 0), stages,
+      services: Object.entries(services).sort((a, b) => b[1] - a[1]).map(([name, n]) => ({ name, n })),
       spend: m ? m.spend : null, impressions: m?.impressions ?? null, clicks: m?.clicks ?? null, conversations_started: m?.conversations_started ?? null,
       cpl: m && leads ? m.spend / leads : null, cpa: m && won ? m.spend / won : null }
   })
   // Anuncios con gasto en Meta que no trajeron ningún chat al CRM
   for (const [adId, m] of Object.entries(spendOf)) {
     if (rows.find((r) => r.source_id === adId) || !(m.spend > 0)) continue
-    rows.push({ key: adId, source_id: adId, headline: null, ad_name: m.ad_name, adset_name: m.adset_name, campaign_name: m.campaign_name, leads: 0, engaged: 0, answered: 0, won: 0, lost: 0, open: 0, value_won: 0, stages: {},
+    rows.push({ key: adId, source_id: adId, headline: null, ad_name: m.ad_name, adset_name: m.adset_name, campaign_name: m.campaign_name, leads: 0, engaged: 0, answered: 0, won: 0, lost: 0, open: 0, value_won: 0, stages: {}, services: [],
       spend: m.spend, impressions: m.impressions, clicks: m.clicks, conversations_started: m.conversations_started, cpl: null, cpa: null })
   }
   rows.sort((a, b) => b.leads - a.leads || (b.spend || 0) - (a.spend || 0))

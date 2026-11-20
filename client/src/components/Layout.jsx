@@ -18,9 +18,26 @@ const NAV = [
   ['/configuracion', 'settings', 'Configuración'],
 ]
 
+/** Revisa cada minuto (y al volver a la pestaña) si se publicó una versión nueva del CRM */
+function useNewVersion() {
+  const [available, setAvailable] = useState(false)
+  useEffect(() => {
+    const current = typeof __BUILD_ID__ !== 'undefined' ? __BUILD_ID__ : null
+    if (!current) return
+    const check = () => fetch('/api/version', { cache: 'no-store' }).then((r) => r.json()).then((v) => { if (v.build && v.build !== current) setAvailable(true) }).catch(() => {})
+    const t = setInterval(check, 60_000)
+    const onVisible = () => document.visibilityState === 'visible' && check()
+    document.addEventListener('visibilitychange', onVisible)
+    check()
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', onVisible) }
+  }, [])
+  return available
+}
+
 export default function Layout() {
   const { user, companies, company, companyId, setCompanyId, logout, toasts, theme, setTheme, prefs, setPrefs } = useStore()
   const [unread, setUnread] = useState(0)
+  const newVersion = useNewVersion()
   const [open, setOpen] = useState(false)
   const loc = useLocation()
   useEffect(() => { setOpen(false) }, [loc.pathname])
@@ -66,15 +83,16 @@ export default function Layout() {
         </div>
       </aside>
       <main className="main"><Outlet /></main>
+      {newVersion && <div className="update-bar" role="status">Hay una versión nueva del CRM<button className="btn btn-sm" onClick={() => window.location.reload()}><Icon name="refresh" size={14} /> Recargar</button></div>}
       <div className="toasts">{toasts.map((t) => <div key={t.id} className={`toast ${t.kind}`}>{t.text}</div>)}</div>
     </div>
   )
 }
 
-export function Modal({ title, onClose, children, footer }) {
+export function Modal({ title, onClose, children, footer, wide }) {
   return (
     <div className="modal-bg" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal">
+      <div className={`modal ${wide ? 'wide' : ''}`}>
         <div className="card-head"><h2>{title}</h2><div className="actions"><button className="btn btn-ghost btn-sm btn-icon" onClick={onClose}><Icon name="x" size={16} /></button></div></div>
         <div className="card-body">{children}</div>
         {footer && <div className="card-head" style={{ borderTop: '1px solid var(--border)', borderBottom: 'none', justifyContent: 'flex-end' }}>{footer}</div>}

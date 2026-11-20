@@ -78,7 +78,7 @@ export default function Ads() {
                     {!a.campaign_name && a.body && <div className="adsub" title={a.body}>{a.body}</div>}
                     <div className="adsub">{[PLATFORM_LABEL[a.platform], a.source_id && `ID ${a.source_id}`, a.last_at && `último chat ${fmtDate(a.last_at)}`].filter(Boolean).join(' · ')}{a.source_url && <> · <a href={a.source_url} target="_blank" rel="noreferrer">ver anuncio</a></>}</div>
                   </td>
-                  <td><b>{a.leads}</b></td>
+                  <td><b>{a.leads}</b>{a.services?.length > 0 && <div className="adsub" style={{ maxWidth: 200, whiteSpace: 'normal' }} title="Servicio que eligieron en el menú o que anotó el asesor">{a.services.slice(0, 3).map((s) => `${s.name} ${s.n}`).join(' · ')}</div>}</td>
                   <td>{a.engaged} <span className="muted">({pct(a.engaged, a.leads)})</span></td>
                   <td>{a.answered} <span className="muted">({pct(a.answered, a.leads)})</span></td>
                   <td>{a.won}{a.lost > 0 && <span className="muted"> · {a.lost} perdidos</span>}</td>

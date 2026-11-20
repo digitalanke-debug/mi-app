@@ -22,12 +22,12 @@ export async function applyCompanyDefaults(company) {
   ])
   const A = (o) => ({ company_id: id, enabled: true, conditions: '{}', ...o, actions: JSON.stringify(o.actions), conditions: JSON.stringify(o.conditions || {}) })
   await db('automations').insert([
-    A({ name: 'Bienvenida automática', trigger: 'new_conversation', actions: [{ type: 'reply', body: `¡Hola! Bienvenido a ${name} 👋. En un momento uno de nuestros asesores te atenderá. Mientras tanto, cuéntanos en qué te podemos ayudar.` }, { type: 'move_stage', stage_name: 'Nuevo' }] }),
+    A({ name: 'Bienvenida automática', trigger: 'new_conversation', actions: [{ type: 'reply', body: `¡Hola! 👋 Qué gusto saludarle. Bienvenido(a) a ${name}. Un asesor le atiende personalmente {{cuando}}; mientras tanto, cuéntenos en qué le podemos ayudar. 😊` }, { type: 'move_stage', stage_name: 'Nuevo' }] }),
     A({ name: 'Etiquetar leads de Google Ads', trigger: 'new_conversation', conditions: { source: 'google_ads' }, actions: [{ type: 'add_tag', tag_name: 'Google Ads' }] }),
     A({ name: 'Etiquetar leads de Meta Ads', trigger: 'new_conversation', conditions: { source: 'meta_ads' }, actions: [{ type: 'add_tag', tag_name: 'Meta Ads' }] }),
     A({ name: 'Asignación automática (round robin)', trigger: 'new_conversation', actions: [{ type: 'assign', mode: 'round_robin' }] }),
     A({ name: 'Palabra clave: precio', trigger: 'keyword', conditions: { keywords: ['precio', 'costo', 'cuánto vale', 'cuanto vale', 'valor'] }, actions: [{ type: 'add_tag', tag_name: 'Caliente' }, { type: 'move_stage', stage_name: 'Calificado' }] }),
-    A({ name: 'Fuera de horario', trigger: 'outside_hours', actions: [{ type: 'reply', body: 'Gracias por escribirnos. En este momento estamos fuera de horario (L-V 8am a 6pm). Te responderemos a primera hora. 🙌' }] }),
+    A({ name: 'Fuera de horario', trigger: 'outside_hours', actions: [{ type: 'reply', body: '¡Gracias por escribirnos! 😊 En este momento estamos fuera de horario ({{horario}}), pero ya recibimos su mensaje y un asesor le responde {{cuando}}.' }] }),
     A({ name: 'Sin respuesta 2 horas', trigger: 'inactivity', conditions: { minutes: 120, who: 'us' }, actions: [{ type: 'add_tag', tag_name: 'Sin respuesta' }, { type: 'notify', body: 'Lead lleva más de 2 horas sin respuesta' }] }),
     A({ name: 'Agente IA responde primero', trigger: 'message_in', enabled: false, conditions: { ai_only_when_no_human_reply_minutes: 3 }, actions: [{ type: 'ai_reply' }] }),
   ])

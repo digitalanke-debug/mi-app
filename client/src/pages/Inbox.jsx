@@ -323,10 +323,28 @@ function SidePanel({ data, meta, patch, reload, onClose }) {
       </div>
       <div className="sec">
         <h3>Actividad</h3>
-        <div className="activity">{activity.slice(0, 12).map((a) => <div key={a.id}><b>{a.type}</b> {a.user_name ? `por ${a.user_name}` : ''} <span className="muted">{ago(a.created_at)}</span></div>)}</div>
+        <div className="activity">{activity.slice(0, 12).map((a) => <div key={a.id}><b>{activityLabel(a)}</b> {a.user_name ? `por ${a.user_name}` : ''} <span className="muted">{ago(a.created_at)}</span></div>)}</div>
       </div>
     </aside>
   )
+}
+
+/** Texto legible para el historial de actividad del chat */
+function activityLabel(a) {
+  let d = {}
+  try { d = typeof a.data === 'string' ? JSON.parse(a.data) : a.data || {} } catch {}
+  switch (a.type) {
+    case 'menu.option': return `Eligió en el menú: ${d.option}. ${d.label}`
+    case 'menu.skip': return 'No eligió opción del menú'
+    case 'outside_hours.notice': return 'Aviso de fuera de horario (en el menú)'
+    case 'automation.run': return `Automatización: ${d.automation || ''}`
+    case 'conversation.created': return 'Chat nuevo'
+    case 'conversation.imported': return 'Chat importado del historial'
+    case 'contact.phone': return 'Teléfono actualizado'
+    case 'ai.reply': return 'Respuesta del agente IA'
+    case 'ai.handoff': return 'El agente IA pasó el chat a un asesor'
+    default: return a.type
+  }
 }
 
 /** Anuncio de Meta por el que llegó la persona */

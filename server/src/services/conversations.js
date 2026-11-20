@@ -38,6 +38,8 @@ export async function broadcastConversation(id) {
 export async function sendOutbound(conversationId, { body, senderType = 'user', userId = null, type = 'text', media = null, savedMedia = null }) {
   const conv = await db('conversations').where({ id: conversationId }).first()
   if (!conv) throw new Error('Conversación no existe')
+  // Si un asesor escribe, el menú de bienvenida deja de esperar respuesta
+  if (senderType === 'user' && conv.menu_state) await db('conversations').where({ id: conversationId }).update({ menu_state: null })
   const contact = await db('contacts').where({ id: conv.contact_id }).first()
   const inst = conv.instance_id ? await db('whatsapp_instances').where({ id: conv.instance_id }).first() : null
 

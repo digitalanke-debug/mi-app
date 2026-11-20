@@ -42,8 +42,8 @@ const MENUS = [
       reply: ask('¡Claro que sí! 🙌', ['Su nombre completo', 'Para qué necesita la fiducia (proyecto, inversión o patrimonio)'], undefined, 'Un asesor') },
     { label: 'Cursos, masterclass y eventos', service: 'Cursos y eventos', keywords: 'curso, cursos, masterclass, clase, reto, evento, cafe, inscripcion, inscribirme',
       reply: ask('¡Qué bueno que le interese! 🎓', ['Su nombre completo', 'Qué curso o evento vio', 'Su correo electrónico'], 'le envía la información {{cuando}}. 😊', 'Un asesor') },
-    { label: 'Pensión y plan de retiro', service: 'Asesoría pensional', keywords: 'pension, pensional, retiro, jubilacion',
-      reply: ask('Con mucho gusto. 🤝', ['Su nombre completo', 'Su edad', 'En qué fondo cotiza'], undefined, 'Un asesor') },
+    { label: 'Invertir en un proyecto inmobiliario', service: 'Inversión inmobiliaria', keywords: 'invertir, inversion, inversionista, rentabilidad, participar, comprar',
+      reply: ask('¡Excelente! 🙌 Con gusto le contamos cómo invertir de forma segura a través de fiducia.', ['Su nombre completo', 'Ciudad donde le gustaría invertir', 'Cuánto le gustaría invertir, aproximadamente'], undefined, 'Un asesor') },
     human('asesor'),
   ], 'un asesor') }) },
   { match: (n) => n === 'ddi' || n.startsWith('ddi'), menu: (name) => ({ intro: intro(name), ...finish([

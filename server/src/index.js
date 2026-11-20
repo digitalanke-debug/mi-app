@@ -15,7 +15,8 @@ import { whatsappRouter } from './routes/whatsapp.js'
 import { conversationsRouter } from './routes/conversations.js'
 import { settingsRouter } from './routes/settings.js'
 import { dashboardRouter } from './routes/dashboard.js'
-import { marketingRouter } from './routes/marketing.js'
+import { marketingRouter, syncAllMetaAds } from './routes/marketing.js'
+import { backfillAdReferrals } from './services/adBackfill.js'
 import { broadcastsRouter } from './routes/broadcasts.js'
 import { broadcastTick } from './services/broadcasts.js'
 import { checkInactivity } from './services/automations.js'
@@ -72,6 +73,8 @@ if (config.seedOnEmpty) {
 }
 setInterval(broadcastTick, 3000) // difusiones: un mensaje cada 20-45 s por difusión
 setInterval(() => checkInactivity().catch((e) => console.error('inactivity:', e.message)), 60_000)
+// Gasto y nombres de los anuncios de Meta: cada 6 horas
+setInterval(() => syncAllMetaAds().catch((e) => console.warn('Meta Ads:', e.message)), 6 * 3600_000)
 
 // WhatsApp por QR: al arrancar repara el webhook de cada número y cada 15 s sincroniza su estado real
 if (config.whatsappProvider === 'evolution') {
@@ -89,6 +92,12 @@ if (config.whatsappProvider === 'evolution') {
   // Números ocultos por WhatsApp (@lid): busca el teléfono real cada 10 min
   const lidSweep = () => resolveHiddenPhones().then((r) => r.found && console.log(`Números reales encontrados: ${r.found} de ${r.pending}`)).catch((e) => console.warn('números ocultos:', e.message))
   setTimeout(lidSweep, 60_000)
+  // Una sola vez por número: recupera de qué anuncio llegaron los chats que ya están en el CRM
+  setTimeout(async () => {
+    for (const inst of await evoInstances()) {
+      try { const r = await backfillAdReferrals(inst); if (!r.skipped) console.log(`Anuncios recuperados en ${inst.name}: ${r.recorded} de ${r.withAd} mensajes con anuncio (${r.scanned} revisados)`) } catch (e) { console.warn(`anuncios ${inst.instance_key}:`, e.message) }
+    }
+  }, 90_000)
   setInterval(lidSweep, 10 * 60_000)
   // Contactos guardados en el WhatsApp de cada número: se sincronizan cada 6 horas
   setInterval(async () => {

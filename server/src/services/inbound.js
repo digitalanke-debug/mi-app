@@ -4,6 +4,7 @@ import { loadConversation, logActivity } from './conversations.js'
 import { fire } from './automations.js'
 import { saveMedia } from './media.js'
 import { providerFor } from './whatsapp/index.js'
+import { recordAdReferral } from './adReferrals.js'
 import { findContactByLid, setContactPhone, resolveHiddenPhone } from './contactIdentity.js'
 
 /**
@@ -84,6 +85,11 @@ export async function handleInbound(inst, { phone, name, body, type = 'text', wa
   const [mrow] = await db('messages').insert({ conversation_id: conv.id, direction: 'in', sender_type: 'contact', type, body: body || (saved ? '' : (type !== 'text' ? `[${type}]` : '')), wa_message_id: waMessageId, status: 'delivered', created_at: ts,
     media_url: saved?.url || null, media_name: saved?.name || media?.name || null, media_mime: saved?.mime || media?.mime || null, media_size: saved?.size || null }).returning('id')
   const message = await db('messages').where({ id: mrow.id ?? mrow }).first()
+  // Llegó desde un anuncio de Meta: se guarda cuál fue
+  if (adReferral?.ad) {
+    try { await recordAdReferral({ companyId: company.id, contactId: contact.id, conversationId: conv.id, messageId: message.id, waMessageId, ad: adReferral.ad }) }
+    catch (e) { console.error('No se pudo guardar el anuncio de origen:', e.message) }
+  }
   emitCompany(company.id, 'message:new', { ...message, company_id: company.id })
   emitCompany(company.id, 'conversation:update', await loadConversation(conv.id))
 

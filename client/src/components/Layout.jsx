@@ -9,6 +9,7 @@ const NAV = [
   ['/pipeline', 'kanban', 'Pipeline'],
   ['/contactos', 'users', 'Contactos'],
   ['/dashboard', 'chart', 'Dashboard'],
+  ['/anuncios', 'megaphone', 'Anuncios'],
   ['/automatizaciones', 'zap', 'Automatizaciones'],
   ['/difusiones', 'send', 'Difusiones'],
   ['/agente-ia', 'sparkles', 'Agente IA'],

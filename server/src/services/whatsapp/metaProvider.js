@@ -1,4 +1,5 @@
 import crypto from 'node:crypto'
+import { adFromMetaReferral, adLabel } from '../adReferrals.js'
 import { config } from '../../config.js'
 import { db, now } from '../../db/knex.js'
 import { emitCompany } from '../realtime.js'
@@ -165,7 +166,8 @@ export async function parseMetaChange(inst, value) {
     else if (kind === 'reaction') continue
     else body = `[${kind || 'mensaje no soportado'}]`
     // Anuncios "clic a WhatsApp" (Meta Ads) llegan con referral
-    const adReferral = m.referral ? { source: 'meta_ads', campaign: m.referral.headline || m.referral.source_id || 'Meta CTWA' } : null
+    const ad = adFromMetaReferral(m.referral)
+    const adReferral = ad ? { source: 'meta_ads', campaign: adLabel(ad), ad } : null
     inbound.push({ phone: m.from, name: names[m.from] || null, body, type, waMessageId: m.id, adReferral, media })
   }
   const statuses = (value.statuses || []).map((s) => ({ id: s.id, status: s.status, error: s.errors?.[0] ? `${s.errors[0].code}: ${s.errors[0].title}` : null }))

@@ -90,6 +90,12 @@ export async function fire(trigger, ctx) {
   const autos = await db('automations').where({ company_id: ctx.company.id, trigger, enabled: true })
   for (const auto of autos) {
     if (!matches(auto, ctx)) continue
+    // El aviso de fuera de horario se envía una sola vez cada 12 horas por chat (no en cada mensaje)
+    if (trigger === 'outside_hours') {
+      const recent = await db('activity_log').where({ conversation_id: ctx.conversation.id, type: 'automation.run' })
+        .where('created_at', '>', new Date(Date.now() - 12 * 3600_000).toISOString()).whereLike('data', `%"trigger":"outside_hours"%`).first()
+      if (recent) continue
+    }
     await runActions(auto, { ...ctx, conditions: parse(auto.conditions, {}) })
     ctx.conversation = await db('conversations').where({ id: ctx.conversation.id }).first()
   }

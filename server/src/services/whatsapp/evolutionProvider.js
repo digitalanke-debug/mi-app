@@ -2,6 +2,7 @@ import { config } from '../../config.js'
 import { db, now } from '../../db/knex.js'
 import { emitCompany } from '../realtime.js'
 import { publicInstance } from './public.js'
+import { adFromEvolution, adLabel } from '../adReferrals.js'
 
 /**
  * Proveedor EVOLUTION API (https://doc.evolution-api.com)
@@ -42,7 +43,7 @@ export function describeEvolutionMessage(m) {
   const body = inner.conversation || inner.extendedTextMessage?.text || inner.imageMessage?.caption || inner.videoMessage?.caption || inner.documentMessage?.caption || ''
   const type = inner.imageMessage || inner.stickerMessage ? 'image' : inner.audioMessage ? 'audio' : inner.videoMessage ? 'video' : inner.documentMessage ? 'document' : 'text'
   const label = { image: '[imagen]', audio: '[audio]', video: '[video]', document: `[documento${inner.documentMessage?.fileName ? `: ${inner.documentMessage.fileName}` : ''}]` }[type]
-  return { body: body || label || (inner.locationMessage ? '[ubicación]' : inner.contactMessage ? '[contacto]' : ''), type, ad: inner.extendedTextMessage?.contextInfo?.externalAdReply || null }
+  return { body: body || label || (inner.locationMessage ? '[ubicación]' : inner.contactMessage ? '[contacto]' : ''), type, ad: adFromEvolution(m) }
 }
 
 /** Número de teléfono real de un mensaje (WhatsApp ahora usa identificadores @lid; el teléfono viene en remoteJidAlt) */
@@ -262,8 +263,8 @@ export const evolutionProvider = {
         const body = desc.type === 'text' ? desc.body : (msg.imageMessage?.caption || msg.videoMessage?.caption || msg.documentMessage?.caption || '')
         const mediaMsg = msg.imageMessage || msg.audioMessage || msg.documentMessage || msg.videoMessage || msg.stickerMessage || null
         const type = msg.imageMessage ? 'image' : msg.audioMessage ? 'audio' : msg.documentMessage ? 'document' : msg.videoMessage ? 'video' : msg.stickerMessage ? 'image' : 'text'
-        // Anuncios "clic a WhatsApp" de Meta llegan con contextInfo.externalAdReply
-        const ad = msg.extendedTextMessage?.contextInfo?.externalAdReply
+        // Anuncios "clic a WhatsApp" de Meta: Evolution entrega los datos del anuncio en contextInfo.externalAdReply
+        const ad = desc.ad
         return {
           phone: phoneFromKey(m.key) || m.key.remoteJid.split('@')[0],
           jid: phoneFromKey(m.key) ? `${phoneFromKey(m.key)}@s.whatsapp.net` : m.key.remoteJid,
@@ -272,7 +273,7 @@ export const evolutionProvider = {
           body: body || '',
           type,
           waMessageId: m.key.id,
-          adReferral: ad ? { source: 'meta_ads', campaign: ad.title || ad.sourceId || 'Meta CTWA' } : null,
+          adReferral: ad ? { source: 'meta_ads', campaign: adLabel(ad), ad } : null,
           media: mediaMsg ? { base64: m.message?.base64 || m.base64 || null, mime: mediaMsg.mimetype || '', name: mediaMsg.fileName || null } : null,
         }
       })

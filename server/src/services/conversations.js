@@ -2,6 +2,7 @@ import { db, now } from '../db/knex.js'
 import { emitCompany } from './realtime.js'
 import { providerFor } from './whatsapp/index.js'
 import { saveMedia, readMediaBase64 } from './media.js'
+import { adsByConversation } from './adReferrals.js'
 
 export async function logActivity(companyId, conversationId, type, data = {}, userId = null) {
   await db('activity_log').insert({ company_id: companyId, conversation_id: conversationId, user_id: userId, type, data: JSON.stringify(data) })
@@ -21,6 +22,7 @@ export async function loadConversation(id) {
   c.tags = await db('conversation_tags as ctg').join('tags as t', 't.id', 'ctg.tag_id').where('ctg.conversation_id', id).select('t.id', 't.name', 't.color')
   const last = await db('messages').where({ conversation_id: id }).orderBy('created_at', 'desc').first()
   c.last_message = last ? { body: last.body, direction: last.direction, sender_type: last.sender_type, created_at: last.created_at } : null
+  c.ad = (await adsByConversation([id]))[id]?.[0] || null // anuncio de Meta por el que llegó
   return c
 }
 

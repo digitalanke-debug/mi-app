@@ -19,6 +19,9 @@ export default function Settings() {
   const [spend, setSpend] = useState([])
   const [csv, setCsv] = useState('')
   const [syncing, setSyncing] = useState(false)
+  const [mads, setMads] = useState(null)
+  const [mform, setMform] = useState({})
+  const [msync, setMsync] = useState(false)
 
   const load = () => {
     if (!companyId) return
@@ -27,7 +30,10 @@ export default function Settings() {
     api('/quick-replies', { params: { company_id: companyId } }).then(setQuick)
     api('/marketing/integrations/google-ads', { params: { company_id: companyId } }).then((g) => { setGads(g); setGform(g.config) }).catch(() => {})
     api('/marketing/ad-spend', { params: { company_id: companyId, days: 90 } }).then(setSpend).catch(() => {})
+    api('/marketing/integrations/meta-ads', { params: { company_id: companyId } }).then((m) => { setMads(m); setMform(m.config) }).catch(() => {})
   }
+  const saveMads = async () => { try { const r = await api('/marketing/integrations/meta-ads', { method: 'PUT', body: { ...mform, company_id: companyId } }); toast(r.status === 'configured' ? 'Datos guardados. Ahora pulsa Sincronizar.' : 'Faltan datos', r.status === 'configured' ? 'success' : 'warn'); load() } catch (e) { toast(e.message, 'error') } }
+  const syncMads = async () => { setMsync(true); try { const r = await api('/marketing/integrations/meta-ads/sync', { method: 'POST', body: { company_id: companyId, days: 90 } }); toast(`Meta Ads conectado: ${r.rows} registros de ${r.account || 'la cuenta'} (${r.currency || ''})`, 'success') } catch (e) { toast(e.message, 'error') } finally { setMsync(false); load() } }
   const saveGads = async () => { try { const r = await api('/marketing/integrations/google-ads', { method: 'PUT', body: { ...gform, company_id: companyId } }); toast(r.status === 'configured' ? 'Credenciales guardadas' : 'Guardado (faltan campos para sincronizar)', 'success'); load() } catch (e) { toast(e.message, 'error') } }
   const syncGads = async () => { setSyncing(true); try { const r = await api('/marketing/integrations/google-ads/sync', { method: 'POST', body: { company_id: companyId, days: 30 } }); toast(`Sincronizado: ${r.rows} filas`, 'success'); load() } catch (e) { toast(e.message, 'error'); load() } finally { setSyncing(false) } }
   const importCsv = async () => { try { const r = await api('/marketing/ad-spend/import', { method: 'POST', body: { company_id: companyId, csv } }); toast(`Importadas ${r.imported} filas`, 'success'); setCsv(''); load() } catch (e) { toast(e.message, 'error') } }
@@ -74,6 +80,25 @@ export default function Settings() {
             {quick.map((q) => <div key={q.id} className="row"><span className="kbd">/{q.shortcut}</span><span style={{ flex: 1 }} className="small">{q.body}</span><button className="btn btn-sm btn-ghost btn-icon" onClick={async () => { await api(`/quick-replies/${q.id}`, { method: 'DELETE' }); load() }}><Icon name="x" size={14} /></button></div>)}
             <div className="row"><input className="input" style={{ width: 120 }} placeholder="atajo" value={newQuick.shortcut} onChange={(e) => setNewQuick({ ...newQuick, shortcut: e.target.value.replace(/\W/g, '').toLowerCase() })} /><input className="input" style={{ flex: 1 }} placeholder="Texto (variables: {{agente}}, {{nombre}}, {{empresa}}, {{telefono}})" value={newQuick.body} onChange={(e) => setNewQuick({ ...newQuick, body: e.target.value })} /><button className="btn btn-sm btn-icon" onClick={addQuick}><Icon name="plus" size={15} /></button></div>
           </div></div>
+      </div>
+      <div className="card">
+        <div className="card-head"><h2>Meta Ads: gasto y nombre de cada anuncio</h2>{mads && <span className="chip"><span className={`status-dot ${mads.status === 'connected' ? 'status-connected' : mads.status === 'error' ? 'status-qr' : 'status-disconnected'}`} /> {mads.status === 'connected' ? 'Conectado' : mads.status === 'error' ? 'Error' : mads.status === 'configured' ? 'Falta sincronizar' : 'Sin conectar'}</span>}</div>
+        <div className="card-body grid-2">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <p className="small text-2">El CRM ya identifica de qué anuncio llega cada persona. Con esta conexión además trae de Meta, cada 6 horas, <b>cuánto gastó cada anuncio</b> y su nombre, conjunto y campaña, para calcular el costo por chat en la pantalla Anuncios. Solo lee datos: no cambia nada en la cuenta publicitaria.</p>
+            <div className="field"><label>ID de la cuenta publicitaria</label><input className="input" placeholder="Ej. 1234567890123456" value={mform.ad_account_id || ''} onChange={(e) => setMform({ ...mform, ad_account_id: e.target.value })} /></div>
+            <div className="field"><label>Token de acceso (permiso ads_read)</label><input className="input" type="password" value={mform.access_token || ''} onChange={(e) => setMform({ ...mform, access_token: e.target.value })} /></div>
+            {mads?.last_error && <div className="alert">{mads.last_error}</div>}
+            <div className="row"><button className="btn btn-primary btn-sm" onClick={saveMads} disabled={user.role !== 'admin'}>Guardar</button><button className="btn btn-sm" disabled={msync || !mads || mads.status === 'disconnected' || user.role !== 'admin'} onClick={syncMads}><Icon name="sync" size={14} /> {msync ? 'Sincronizando…' : 'Sincronizar últimos 90 días'}</button>
+              {mads?.last_sync_at && <span className="small muted">Última: {new Date(mads.last_sync_at).toLocaleString('es-CO')}{mads.config?.account_name ? ` · ${mads.config.account_name}` : ''}</span>}</div>
+          </div>
+          <div className="small text-2" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <h3 style={{ color: 'var(--text)' }}>Dónde se consiguen los dos datos</h3>
+            <div><b>1. ID de la cuenta publicitaria.</b> En el Administrador de anuncios de Meta aparece arriba, junto al nombre de la cuenta, o en la dirección de la página después de <span className="kbd">act=</span>.</div>
+            <div><b>2. Token de acceso.</b> En business.facebook.com → Configuración del negocio → Usuarios → <b>Usuarios del sistema</b>: crea uno, asígnale la cuenta publicitaria con permiso de ver rendimiento y pulsa <b>Generar token</b> con el permiso <span className="kbd">ads_read</span> y sin fecha de caducidad.</div>
+            <div>Si esta empresa ya tiene un número por la API oficial, puede usarse el mismo usuario del sistema agregándole la cuenta publicitaria y el permiso <span className="kbd">ads_read</span>.</div>
+          </div>
+        </div>
       </div>
       <div className="card">
         <div className="card-head"><h2>Marketing: inversión en anuncios y Google Ads</h2>{gads && <span className={`chip ${gads.status === 'connected' ? '' : ''}`}><span className={`status-dot ${gads.status === 'connected' ? 'status-connected' : gads.status === 'error' ? 'status-qr' : 'status-disconnected'}`} /> {gads.status === 'connected' ? 'Conectado' : gads.status === 'configured' ? 'Configurado, sin sincronizar' : gads.status === 'error' ? 'Error' : 'Sin conectar'}</span>}</div>

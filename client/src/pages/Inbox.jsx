@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useRealtime, useStore } from '../store.jsx'
-import { api, ago, fmtDate, fmtDateTime, fmtTime, initials, SOURCE_LABEL, getToken, phoneLabel, isHiddenPhone } from '../api.js'
+import { api, ago, fmtDate, fmtDateTime, fmtTime, initials, SOURCE_LABEL, getToken, phoneLabel, isHiddenPhone, mediaSrc, adTitle, PLATFORM_LABEL } from '../api.js'
 import { Icon } from '../components/Icons.jsx'
 import { Modal } from '../components/Layout.jsx'
 
@@ -16,14 +16,17 @@ export default function Inbox() {
   const [q, setQ] = useState('')
   const [meta, setMeta] = useState({ tags: [], stages: [], users: [], quick: [] })
   const selectedId = id ? Number(id) : null
+  const [search, setSearch] = useSearchParams()
+  const adFilter = search.get('anuncio')
 
   const params = useMemo(() => {
     const p = { company_id: companyId, q }
+    if (adFilter) { p.ad = adFilter; p.status = 'all'; return p } // chats que llegaron por un anuncio (desde la pantalla Anuncios)
     if (filter === 'mine') { p.status = 'open'; p.mine = '1' }
     else if (filter === 'unassigned') { p.status = 'open'; p.assigned = 'none' }
     else p.status = filter
     return p
-  }, [companyId, filter, q])
+  }, [companyId, filter, q, adFilter])
 
   const load = useCallback(() => companyId && api('/conversations', { params }).then(setList).catch((e) => toast(e.message, 'error')), [companyId, params, toast])
   useEffect(() => { load() }, [load])
@@ -59,16 +62,19 @@ export default function Inbox() {
           <div className="search"><Icon name="search" size={15} /><input className="input" placeholder="Buscar por nombre o teléfono" value={q} onChange={(e) => setQ(e.target.value)} /></div>
           <div className="filters">{FILTERS.map(([k, l]) => <button key={k} className={filter === k ? 'active' : ''} onClick={() => setFilter(k)}>{l}</button>)}</div>
         </div>
+        {adFilter && <div className="ad-filter"><Icon name="megaphone" size={14} /><span>{adFilter === 'any' ? 'Chats que llegaron por anuncios' : `Chats del anuncio: ${search.get('nombre') || adFilter}`}</span>
+          <button className="btn btn-ghost btn-sm btn-icon" title="Quitar filtro" onClick={() => setSearch({})}><Icon name="x" size={13} /></button></div>}
         <div className="items">
           {list.length === 0 && <div className="empty">Sin conversaciones</div>}
           {list.map((c) => (
-            <div key={c.id} className={`conv-item ${c.id === selectedId ? 'active' : ''}`} onClick={() => nav(`/bandeja/${c.id}`)}>
+            <div key={c.id} className={`conv-item ${c.id === selectedId ? 'active' : ''}`} onClick={() => nav(`/bandeja/${c.id}${window.location.search}`)}>
               <div className="avatar">{initials(c.contact_name)}</div>
               <div className="body">
                 <div className="top"><span className="name">{c.contact_name || phoneLabel(c.contact_phone, c.contact_jid)}</span><span className="time">{ago(c.last_message_at)}</span></div>
                 <div className="preview">{c.last_message?.direction === 'out' && <Icon name={c.last_message.sender_type === 'bot' ? 'bot' : 'checks'} size={13} className="muted" />}<span>{c.last_message ? c.last_message.body : '—'}</span></div>
                 <div className="meta">
                   {c.stage_name && <span className="chip"><span className="dot" style={{ background: c.stage_color }} />{c.stage_name}</span>}
+                  {c.ad && <span className="chip ad-chip" title={`Llegó por el anuncio: ${adTitle(c.ad)}`}><Icon name="megaphone" size={12} /><span>{adTitle(c.ad)}</span></span>}
                   {c.tags.slice(0, 2).map((t) => <span key={t.id} className="chip tag" style={{ background: t.color }}>{t.name}</span>)}
                   {c.assigned_name ? <span className="chip">{initials(c.assigned_name)}</span> : <span className="chip" style={{ color: 'var(--warn)' }}>Sin asignar</span>}
                   {c.unread_count > 0 && <span className="unread" style={{ marginLeft: 'auto' }}>{c.unread_count}</span>}
@@ -142,7 +148,9 @@ function Chat({ id, meta, onChanged, onBack, onTogglePanel }) {
   const applyQuick = (qr) => { setText(fill(qr.body)); setShowQuick(false); setPop(null) }
 
   if (!data) return <div className="chat"><div className="empty" style={{ margin: 'auto' }}>Cargando…</div></div>
-  const { conversation: c, contact, messages } = data
+  const { conversation: c, contact, messages, ads = [] } = data
+  const adsAt = (msgId) => ads.filter((a) => a.message_id === msgId)
+  const adsLoose = ads.filter((a) => !messages.find((m) => m.id === a.message_id))
   const quickMatches = meta.quick.filter((q) => text === '' || text === '/' || q.shortcut.includes(text.replace('/', '')))
 
   let lastDay = ''
@@ -161,14 +169,16 @@ function Chat({ id, meta, onChanged, onBack, onTogglePanel }) {
           </div>
         </div>
         <div className="chat-msgs">
+          {adsLoose.map((a) => <AdCard key={a.id} ad={a} />)}
           {messages.map((m) => {
             const day = fmtDate(m.created_at)
             const sep = day !== lastDay; lastDay = day
             return (
               <div key={m.id} style={{ display: 'contents' }}>
                 {sep && <div className="day-sep">{day}</div>}
+                {adsAt(m.id).map((a) => <AdCard key={a.id} ad={a} />)}
                 <div className={`msg ${m.direction} ${m.sender_type}`}>
-                  {m.direction === 'out' && m.sender_type !== 'system' && <div className="who">{m.sender_type === 'bot' ? <><Icon name="bot" size={13} /> Agente IA</> : m.sender_name || 'Asesor'}</div>}
+                  {m.direction === 'out' && m.sender_type !== 'system' && <div className="who">{m.sender_type === 'bot' ? <><Icon name="bot" size={13} /> Respuesta automática</> : m.sender_name || 'Asesor'}</div>}
                   <MediaView m={m} onZoom={setLightbox} />
                   {m.body && <div className={m.media_url ? 'caption' : ''}>{m.body}</div>}
                   <div className="t">{fmtTime(m.created_at)} {m.direction === 'out' && <MsgStatus m={m} />}</div>
@@ -215,7 +225,7 @@ function Chat({ id, meta, onChanged, onBack, onTogglePanel }) {
 
 function SidePanel({ data, meta, patch, reload, onClose }) {
   const { toast } = useStore()
-  const { conversation: c, contact, notes, tasks, activity } = data
+  const { conversation: c, contact, notes, tasks, activity, ads = [] } = data
   const [note, setNote] = useState('')
   const [task, setTask] = useState('')
   const [, tick] = useState(0)
@@ -257,6 +267,10 @@ function SidePanel({ data, meta, patch, reload, onClose }) {
         <div className="small text-2">{phoneLabel(contact.phone, contact.wa_jid)}{contact.city ? ` · ${contact.city}` : ''}</div>
         <div className="row" style={{ justifyContent: 'center' }}><span className="chip">{SOURCE_LABEL[contact.source] || contact.source}</span>{contact.campaign && <span className="chip">{contact.campaign}</span>}</div>
       </div>
+      {ads.length > 0 && <div className="sec">
+        <h3><Icon name="megaphone" size={13} /> Anuncio de origen</h3>
+        {ads.map((a) => <AdCard key={a.id} ad={a} compact />)}
+      </div>}
       <div className="sec">
         <h3><Icon name="phone" size={13} /> Teléfono</h3>
         <div className="row">
@@ -312,6 +326,24 @@ function SidePanel({ data, meta, patch, reload, onClose }) {
         <div className="activity">{activity.slice(0, 12).map((a) => <div key={a.id}><b>{a.type}</b> {a.user_name ? `por ${a.user_name}` : ''} <span className="muted">{ago(a.created_at)}</span></div>)}</div>
       </div>
     </aside>
+  )
+}
+
+/** Anuncio de Meta por el que llegó la persona */
+function AdCard({ ad, compact }) {
+  return (
+    <div className={`ad-card ${compact ? 'compact' : ''}`}>
+      {ad.thumbnail_url && <img src={mediaSrc(ad.thumbnail_url)} alt="" loading="lazy" />}
+      <div className="info">
+        <div className="lbl"><Icon name="megaphone" size={12} /> Llegó por un anuncio{ad.platform ? ` de ${PLATFORM_LABEL[ad.platform] || ad.platform}` : ' de Meta'} · {fmtDateTime(ad.created_at)}</div>
+        <div className="ttl">{ad.headline || 'Anuncio sin título'}</div>
+        {ad.body && <div className="txt">{ad.body}</div>}
+        <div className="row small">
+          {ad.source_url && <a href={ad.source_url} target="_blank" rel="noreferrer">Ver anuncio</a>}
+          {ad.source_id && <span className="muted">ID {ad.source_id}</span>}
+        </div>
+      </div>
+    </div>
   )
 }
 

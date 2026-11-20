@@ -46,3 +46,9 @@ export const formatPhone = (phone) => {
 }
 export const phoneLabel = (phone, jid) => (isHiddenPhone(phone, jid) ? 'Número oculto por WhatsApp' : formatPhone(phone))
 export const initials = (name) => (name || '?').split(' ').slice(0, 2).map((w) => w[0]).join('').toUpperCase()
+
+/** Dirección de un archivo guardado en el CRM (los adjuntos piden la sesión) */
+export const mediaSrc = (url) => (url ? `${url}?t=${getToken()}` : null)
+/** Nombre para mostrar de un anuncio de Meta */
+export const adTitle = (ad) => ad?.ad_name || ad?.headline || (ad?.source_id ? `Anuncio ${ad.source_id}` : 'Anuncio de Meta')
+export const PLATFORM_LABEL = { facebook: 'Facebook', instagram: 'Instagram' }

@@ -1,6 +1,7 @@
 import { db, now } from '../db/knex.js'
 import { evolutionMessages, describeEvolutionMessage, phoneFromKey, lidFromKey } from './whatsapp/evolutionProvider.js'
 import { findContactByLid, setContactPhone } from './contactIdentity.js'
+import { recordAdReferral, adLabel } from './adReferrals.js'
 import { logActivity } from './conversations.js'
 import { detectSource } from './inbound.js'
 
@@ -67,7 +68,7 @@ export async function importEvolutionHistory(inst, { days = 365 } = {}) {
     if (!contact) {
       const ad = msgs.find((x) => x.ad)?.ad
       const firstIn = msgs.find((x) => !x.fromMe)
-      const src = (firstIn && detectSource(firstIn.body)) || (ad ? { source: 'meta_ads', campaign: ad.title || 'Meta CTWA' } : null)
+      const src = (firstIn && detectSource(firstIn.body)) || (ad ? { source: 'meta_ads', campaign: adLabel(ad) } : null)
       const [row] = await db('contacts').insert({ company_id: company.id, phone, wa_jid: jid, wa_lid: lid, name: name || (jid.endsWith('@lid') ? 'Contacto de WhatsApp' : `+${phone}`), source: src?.source || 'organico', campaign: src?.campaign || null, created_at: first.created_at }).returning('id')
       contact = await db('contacts').where({ id: row.id ?? row }).first()
       contactsCreated++
@@ -104,6 +105,11 @@ export async function importEvolutionHistory(inst, { days = 365 } = {}) {
     }))
     for (let i = 0; i < rows.length; i += 200) await db('messages').insert(rows.slice(i, i + 200))
     messagesImported += rows.length
+    // Mensajes que llegaron desde un anuncio de Meta
+    for (const x of msgs.filter((m) => m.ad && !m.fromMe && m.id)) {
+      const saved = await db('messages').where({ conversation_id: conv.id, wa_message_id: x.id }).first()
+      if (saved) await recordAdReferral({ companyId: company.id, contactId: contact.id, conversationId: conv.id, messageId: saved.id, waMessageId: x.id, ad: x.ad, createdAt: x.created_at }).catch((e) => console.warn('anuncio importado:', e.message))
+    }
     // Si la conversación ya existía, actualiza la última actividad cuando el historial es más reciente
     if (rows.length && (!conv.last_message_at || last.created_at > conv.last_message_at)) await db('conversations').where({ id: conv.id }).update({ last_message_at: last.created_at })
   }

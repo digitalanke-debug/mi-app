@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { matchContact } from '../services/search.js'
+import { adsByConversation } from '../services/adReferrals.js'
 import { db, now } from '../db/knex.js'
 import { requireCompany, ownsRow } from '../auth.js'
 import { loadConversation, sendOutbound, broadcastConversation, logActivity, sendTemplateMessage, retryMessage } from '../services/conversations.js'
@@ -21,7 +22,7 @@ async function canAccess(req, res, next) {
 
 // Lista de la bandeja
 conversationsRouter.get('/', requireCompany, async (req, res) => {
-  const { status = 'open', assigned, tag, stage, q, mine, limit = 200 } = req.query
+  const { status = 'open', assigned, tag, stage, q, mine, ad, limit = 200 } = req.query
   let query = db('conversations as c').where('c.company_id', req.companyId)
   if (status !== 'all') query = query.where('c.status', status)
   if (mine === '1') query = query.where('c.assigned_user_id', req.user.id)
@@ -29,6 +30,8 @@ conversationsRouter.get('/', requireCompany, async (req, res) => {
   else if (assigned) query = query.where('c.assigned_user_id', Number(assigned))
   if (stage) query = query.where('c.stage_id', Number(stage))
   if (tag) query = query.whereIn('c.id', db('conversation_tags').where('tag_id', Number(tag)).select('conversation_id'))
+  // ad=any: llegaron por algún anuncio; ad=<id o título>: por ese anuncio
+  if (ad) query = query.whereIn('c.id', db('ad_referrals').where('company_id', req.companyId).modify((b) => { if (ad !== 'any') b.where((w) => w.where('source_id', ad).orWhere('headline', ad)) }).select('conversation_id'))
   if (q) query = query.whereIn('c.contact_id', db('contacts').where('company_id', req.companyId).where((b) => matchContact(b, q)).select('id'))
   const rows = await query
     .leftJoin('contacts as ct', 'ct.id', 'c.contact_id')
@@ -42,7 +45,9 @@ conversationsRouter.get('/', requireCompany, async (req, res) => {
   const tags = ids.length ? await db('conversation_tags as ctg').join('tags as t', 't.id', 'ctg.tag_id').whereIn('ctg.conversation_id', ids).select('ctg.conversation_id', 't.id', 't.name', 't.color') : []
   const lastIds = ids.length ? await db('messages').whereIn('conversation_id', ids).groupBy('conversation_id').select('conversation_id').max('id as id') : []
   const lasts = lastIds.length ? await db('messages').whereIn('id', lastIds.map((l) => l.id)).select('conversation_id', 'body', 'direction', 'sender_type', 'created_at') : []
+  const ads = await adsByConversation(ids)
   for (const r of rows) {
+    r.ad = ads[r.id]?.[0] || null
     r.tags = tags.filter((t) => t.conversation_id === r.id).map(({ id, name, color }) => ({ id, name, color }))
     const l = lasts.find((m) => m.conversation_id === r.id)
     r.last_message = l ? { body: l.body, direction: l.direction, sender_type: l.sender_type, created_at: l.created_at } : null
@@ -58,7 +63,8 @@ conversationsRouter.get('/:id', canAccess, async (req, res) => {
   const notes = await db('notes as n').leftJoin('users as u', 'u.id', 'n.user_id').where('n.conversation_id', conv.id).orderBy('n.created_at', 'desc').select('n.*', 'u.name as user_name')
   const tasks = await db('tasks').where({ conversation_id: conv.id }).orderBy('due_at')
   const activity = await db('activity_log as a').leftJoin('users as u', 'u.id', 'a.user_id').where('a.conversation_id', conv.id).orderBy('a.created_at', 'desc').limit(50).select('a.*', 'u.name as user_name')
-  res.json({ conversation: conv, contact, messages, notes, tasks, activity })
+  const ads = (await adsByConversation([conv.id]))[conv.id] || []
+  res.json({ conversation: conv, contact, messages, notes, tasks, activity, ads })
 })
 
 conversationsRouter.post('/:id/messages', canAccess, async (req, res) => {

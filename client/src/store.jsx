@@ -53,6 +53,8 @@ export function StoreProvider({ children }) {
     if (!user) return
     const s = io({ auth: { token: getToken() } })
     socketRef.current = s
+    // Informa al servidor cómo tiene los avisos este navegador (se ve en la pantalla Revisión)
+    s.on('connect', () => s.emit('prefs', { ...prefsRef.current, permission: 'Notification' in window ? Notification.permission : 'unsupported' }))
     const forward = (event) => (payload) => listeners.current.get(event)?.forEach((fn) => fn(payload))
     for (const ev of ['message:new', 'message:status', 'conversation:update', 'conversation:removed', 'instance:update', 'notification', 'typing']) s.on(ev, forward(ev))
     s.on('notification', (n) => toast(n.body, 'warn'))
@@ -66,6 +68,8 @@ export function StoreProvider({ children }) {
     })
     return () => s.disconnect()
   }, [user, toast])
+
+  useEffect(() => { socketRef.current?.emit('prefs', { ...prefs, permission: 'Notification' in window ? Notification.permission : 'unsupported' }) }, [prefs])
 
   const subscribe = useCallback((event, fn) => {
     if (!listeners.current.has(event)) listeners.current.set(event, new Set())

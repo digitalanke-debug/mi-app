@@ -14,6 +14,7 @@ import Broadcasts from './pages/Broadcasts.jsx'
 import AiAgent from './pages/AiAgent.jsx'
 import Dashboard from './pages/Dashboard.jsx'
 import Ads from './pages/Ads.jsx'
+import Checkup from './pages/Checkup.jsx'
 import Team from './pages/Team.jsx'
 import Settings from './pages/Settings.jsx'
 
@@ -35,6 +36,7 @@ function App() {
         <Route path="/agente-ia" element={<AiAgent />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/anuncios" element={<Ads />} />
+        <Route path="/revision" element={<Checkup />} />
         <Route path="/equipo" element={<Team />} />
         <Route path="/configuracion" element={<Settings />} />
         <Route path="*" element={<Navigate to="/bandeja" replace />} />

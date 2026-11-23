@@ -15,6 +15,7 @@ const NAV = [
   ['/agente-ia', 'sparkles', 'Agente IA'],
   ['/whatsapp', 'wa', 'WhatsApp'],
   ['/equipo', 'team', 'Equipo'],
+  ['/revision', 'check', 'Revisión'],
   ['/configuracion', 'settings', 'Configuración'],
 ]
 
@@ -62,7 +63,7 @@ export default function Layout() {
           {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
         <nav className="nav">
-          {NAV.filter(([p]) => p !== '/equipo' || user.role === 'admin').map(([path, ico, label]) => (
+          {NAV.filter(([p]) => !['/equipo', '/revision'].includes(p) || user.role === 'admin').map(([path, ico, label]) => (
             <NavLink key={path} to={path} className={({ isActive }) => (isActive ? 'active' : '')}>
               <Icon name={ico} />{label}
               {path === '/bandeja' && unread > 0 && <span className="badge">{unread}</span>}

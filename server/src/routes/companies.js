@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs'
 import { db } from '../db/knex.js'
 import { requireAdmin, requireCompany } from '../auth.js'
 import { applyCompanyDefaults } from '../services/companyDefaults.js'
+import { companyCheckup } from '../services/checkup.js'
 
 export const companiesRouter = Router()
 
@@ -26,6 +27,9 @@ companiesRouter.patch('/:companyId', requireCompany, requireAdmin, async (req, r
   await db('companies').where({ id: req.companyId }).update({ name, color, sector, description, business_hours, timezone })
   res.json(await db('companies').where({ id: req.companyId }).first())
 })
+
+// Revisión de la empresa (números, mensajes automáticos, anuncios y avisos al equipo)
+companiesRouter.get('/:companyId/checkup', requireCompany, requireAdmin, async (req, res) => res.json(await companyCheckup(req.companyId)))
 
 // Equipo
 companiesRouter.get('/:companyId/users', requireCompany, async (req, res) => {

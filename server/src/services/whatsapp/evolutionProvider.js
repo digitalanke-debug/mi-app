@@ -145,6 +145,12 @@ async function updateInstance(id, patch) {
   return inst
 }
 
+/** ¿Evolution le avisa al CRM los mensajes de este número? */
+export async function webhookStatus(inst) {
+  const w = await api(`/webhook/find/${inst.instance_key}`)
+  return { enabled: !!w?.enabled, url_ok: String(w?.url || '').endsWith(`/api/whatsapp/webhooks/evolution/${inst.instance_key}`), events: w?.events || [] }
+}
+
 /** Diagnóstico: versión de Evolution y estado detallado de todas sus instancias */
 export async function evolutionDiag() {
   const out = {}

@@ -357,3 +357,12 @@ svg.ico { flex-shrink: 0; vertical-align: -3px; }
 :root[data-theme="dark"] .update-bar { background: #262c36; }
 .modal.wide .action-row { grid-template-columns: 150px 1fr auto; }
 @media (max-width: 800px) { .action-row { grid-template-columns: 1fr auto; } .action-row > div { grid-column: 1 / -1; } .update-bar { left: 12px; right: 12px; transform: none; } }
+
+/* Revisión */
+.check-list { display: flex; flex-direction: column; }
+.check-row { display: flex; gap: 10px; padding: 10px 18px; border-bottom: 1px solid var(--border); align-items: flex-start; }
+.check-row:last-child { border-bottom: none; }
+.check-row .dot { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; margin-top: 1px; color: #fff; }
+.check-row .dot.ok { background: var(--success); } .check-row .dot.warn { background: #d97706; } .check-row .dot.bad { background: var(--danger); }
+.check-row .t { font-weight: 600; } .check-row .d { color: var(--text-2); font-size: 12.5px; }
+.check-summary { display: flex; gap: 6px; margin-left: auto; }

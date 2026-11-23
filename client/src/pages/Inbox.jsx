@@ -71,7 +71,7 @@ export default function Inbox() {
               <div className="avatar">{initials(c.contact_name)}</div>
               <div className="body">
                 <div className="top"><span className="name">{c.contact_name || phoneLabel(c.contact_phone, c.contact_jid)}</span><span className="time">{ago(c.last_message_at)}</span></div>
-                <div className="preview">{c.last_message?.direction === 'out' && <Icon name={c.last_message.sender_type === 'bot' ? 'bot' : 'checks'} size={13} className="muted" />}<span>{c.last_message ? c.last_message.body : '—'}</span></div>
+                <div className="preview">{c.last_message?.direction === 'out' && <Icon name={c.last_message.sender_type === 'bot' ? 'bot' : 'checks'} size={13} className="muted" />}<span>{c.last_message ? (c.last_message.body || TYPE_LABEL[c.last_message.type] || '—') : '—'}</span></div>
                 <div className="meta">
                   {c.stage_name && <span className="chip"><span className="dot" style={{ background: c.stage_color }} />{c.stage_name}</span>}
                   {c.ad && <span className="chip ad-chip" title={`Llegó por el anuncio: ${adTitle(c.ad)}`}><Icon name="megaphone" size={12} /><span>{adTitle(c.ad)}</span></span>}
@@ -108,7 +108,8 @@ function Chat({ id, meta, onChanged, onBack, onTogglePanel }) {
   useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }) }, [data?.messages?.length])
 
   useRealtime('message:new', (m) => { if (m.conversation_id === id) setData((d) => d && !d.messages.find((x) => x.id === m.id) ? { ...d, messages: [...d.messages, m] } : d) })
-  useRealtime('message:status', (u) => { if (u.conversation_id === id) setData((d) => d ? { ...d, messages: d.messages.map((x) => (x.id === u.id ? { ...x, status: u.status, error: u.error || x.error } : x)) } : d) })
+  const mergeMessage = (u) => setData((d) => d ? { ...d, messages: d.messages.map((x) => (x.id === u.id ? { ...x, ...Object.fromEntries(Object.entries(u).filter(([, v]) => v !== undefined)) } : x)) } : d)
+  useRealtime('message:status', (u) => { if (u.conversation_id === id) mergeMessage(u) })
   useRealtime('conversation:update', (c) => { if (c.id === id) setData((d) => d ? { ...d, conversation: c } : d) })
   useRealtime('typing', (t) => { if (t.conversationId === id && t.user !== user.name) { setTyping(t.user); setTimeout(() => setTyping(null), 2500) } })
 
@@ -179,8 +180,8 @@ function Chat({ id, meta, onChanged, onBack, onTogglePanel }) {
                 {adsAt(m.id).map((a) => <AdCard key={a.id} ad={a} />)}
                 <div className={`msg ${m.direction} ${m.sender_type}`}>
                   {m.direction === 'out' && m.sender_type !== 'system' && <div className="who">{m.sender_type === 'bot' ? <><Icon name="bot" size={13} /> Respuesta automática</> : m.sender_name || 'Asesor'}</div>}
-                  <MediaView m={m} onZoom={setLightbox} />
-                  {m.body && <div className={m.media_url ? 'caption' : ''}>{m.body}</div>}
+                  <MediaView m={m} onZoom={setLightbox} convId={id} onLoaded={mergeMessage} />
+                  {m.body && !(m.type !== 'text' && !m.media_url && /^\[(audio|imagen|video|documento[^\]]*)\]$/.test(m.body)) && <div className={m.media_url ? 'caption' : ''}>{m.body}</div>}
                   <div className="t">{fmtTime(m.created_at)} {m.direction === 'out' && <MsgStatus m={m} />}</div>
                   {m.direction === 'out' && m.status === 'failed' && <button className="btn btn-sm" style={{ marginTop: 6 }} onClick={() => retry(m)}><Icon name="refresh" size={13} /> Reintentar</button>}
                 </div>
@@ -367,11 +368,40 @@ function AdCard({ ad, compact }) {
 
 const EMOJIS = ['😀', '😊', '😁', '😉', '🙂', '😍', '🤝', '👍', '👏', '🙏', '💪', '✅', '❌', '⭐', '🎉', '🔥', '💼', '📄', '📎', '📞', '📅', '⏰', '💰', '🏠', '🚗', '✈️', '❤️', '😢', '😅', '🤔', '👋', '🙌']
 
-function MediaView({ m, onZoom }) {
-  if (!m.media_url) return null
+const TYPE_LABEL = { audio: '🎤 Nota de voz', image: '📷 Imagen', video: '🎬 Video', document: '📄 Documento' }
+
+/** Nota de voz con velocidad de reproducción (1×, 1,5×, 2×) */
+function AudioPlayer({ src }) {
+  const ref = useRef(null)
+  const [rate, setRate] = useState(1)
+  const next = () => { const r = rate === 1 ? 1.5 : rate === 1.5 ? 2 : 1; setRate(r); if (ref.current) ref.current.playbackRate = r }
+  return (
+    <div className="voice">
+      <audio ref={ref} controls src={src} preload="metadata" onPlay={(e) => { e.currentTarget.playbackRate = rate }} />
+      <button className="btn btn-sm rate" title="Velocidad" onClick={next}>{String(rate).replace('.', ',')}×</button>
+    </div>
+  )
+}
+
+/** El archivo no llegó (historial importado o falla al recibir): se puede pedir de nuevo a WhatsApp */
+function MissingMedia({ m, convId, onLoaded }) {
+  const { toast } = useStore()
+  const [busy, setBusy] = useState(false)
+  if (m.type === 'text' || !m.wa_message_id) return null
+  const load = async () => {
+    setBusy(true)
+    try { onLoaded(await api(`/conversations/${convId}/messages/${m.id}/media`, { method: 'POST' })) }
+    catch (e) { toast(e.message, 'error') } finally { setBusy(false) }
+  }
+  const label = { audio: 'nota de voz', image: 'imagen', video: 'video', document: 'documento' }[m.type] || 'archivo'
+  return <button className="btn btn-sm missing-media" disabled={busy} onClick={load}><Icon name={m.type === 'audio' ? 'mic' : 'download'} size={14} /> {busy ? 'Cargando…' : `Cargar ${label}`}</button>
+}
+
+function MediaView({ m, onZoom, convId, onLoaded }) {
+  if (!m.media_url) return <MissingMedia m={m} convId={convId} onLoaded={onLoaded} />
   const src = `${m.media_url}?t=${getToken()}`
   if (m.type === 'image') return <img className="media" src={src} alt={m.media_name || ''} onClick={() => onZoom(src)} loading="lazy" />
-  if (m.type === 'audio') return <audio controls src={src} preload="none" />
+  if (m.type === 'audio') return <AudioPlayer src={src} />
   if (m.type === 'video') return <video controls src={src} preload="metadata" />
   const kb = m.media_size ? `${Math.round(m.media_size / 1024)} KB` : ''
   return <a className="doc" href={src} target="_blank" rel="noreferrer" download={m.media_name || true}><Icon name="file" size={20} /><div><b>{m.media_name || 'Documento'}</b><br /><small>{m.media_mime} {kb}</small></div></a>

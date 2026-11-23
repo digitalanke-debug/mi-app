@@ -12,6 +12,8 @@ RUN npm run build -w client
 FROM node:22-bookworm-slim
 WORKDIR /app
 ENV NODE_ENV=production
+# ffmpeg: convierte las notas de voz de WhatsApp (OGG) a MP3 para que se escuchen en cualquier navegador
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
 COPY --from=build /app/package.json ./
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/server ./server

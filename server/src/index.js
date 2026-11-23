@@ -17,6 +17,8 @@ import { settingsRouter } from './routes/settings.js'
 import { dashboardRouter } from './routes/dashboard.js'
 import { marketingRouter, syncAllMetaAds } from './routes/marketing.js'
 import { backfillAdReferrals } from './services/adBackfill.js'
+import { convertStoredVoiceNotes } from './services/conversations.js'
+import { ffmpegAvailable } from './services/audio.js'
 import { broadcastsRouter } from './routes/broadcasts.js'
 import { broadcastTick } from './services/broadcasts.js'
 import { checkInactivity } from './services/automations.js'
@@ -42,7 +44,7 @@ app.use(cors({ origin: true, credentials: true }))
 app.use(express.json({ limit: '30mb', verify: (req, res, buf) => { if (req.originalUrl.startsWith('/api/whatsapp/webhooks/')) req.rawBody = buf } }))
 app.use('/uploads', requireAuthOrToken, express.static(UPLOAD_DIR, { maxAge: '7d', index: false }))
 
-app.get('/api/health', (req, res) => res.json({ ok: true, provider: config.whatsappProvider, db: config.dbClient }))
+app.get('/api/health', (req, res) => res.json({ ok: true, provider: config.whatsappProvider, db: config.dbClient, audio: ffmpegAvailable() ? 'mp3' : 'original' }))
 // Versión de la web publicada (la escribe la compilación del cliente); el navegador la consulta para avisar que hay una nueva
 let buildId = null
 app.get('/api/version', (req, res) => {
@@ -81,6 +83,8 @@ if (config.seedOnEmpty) {
 }
 setInterval(broadcastTick, 3000) // difusiones: un mensaje cada 20-45 s por difusión
 setInterval(() => checkInactivity().catch((e) => console.error('inactivity:', e.message)), 60_000)
+// Notas de voz guardadas en OGG: se convierten a MP3 una vez al arrancar (se escuchan también en iPhone y Mac)
+setTimeout(() => convertStoredVoiceNotes().then((r) => r.converted && console.log(`Notas de voz convertidas a MP3: ${r.converted}`)).catch((e) => console.warn('notas de voz:', e.message)), 30_000)
 // Gasto y nombres de los anuncios de Meta: cada 6 horas
 setInterval(() => syncAllMetaAds().catch((e) => console.warn('Meta Ads:', e.message)), 6 * 3600_000)
 

@@ -21,7 +21,7 @@ export async function loadConversation(id) {
   if (!c) return null
   c.tags = await db('conversation_tags as ctg').join('tags as t', 't.id', 'ctg.tag_id').where('ctg.conversation_id', id).select('t.id', 't.name', 't.color')
   const last = await db('messages').where({ conversation_id: id }).orderBy('created_at', 'desc').first()
-  c.last_message = last ? { body: last.body, direction: last.direction, sender_type: last.sender_type, created_at: last.created_at } : null
+  c.last_message = last ? { body: last.body, type: last.type, direction: last.direction, sender_type: last.sender_type, created_at: last.created_at } : null
   c.ad = (await adsByConversation([id]))[id]?.[0] || null // anuncio de Meta por el que llegó
   return c
 }
@@ -164,4 +164,42 @@ export async function retryMessage(messageId) {
   emitCompany(conv.company_id, 'message:status', { id: msg.id, conversation_id: msg.conversation_id, status, error })
   if (status === 'sent' && !conv.first_response_at && msg.sender_type !== 'system') await db('conversations').where({ id: conv.id }).update({ first_response_at: now() })
   return { ...msg, status, wa_message_id: waId, error }
+}
+
+/**
+ * Descarga desde WhatsApp el archivo de un mensaje que llegó sin él (por ejemplo, del historial importado).
+ * Devuelve el mensaje actualizado.
+ */
+export async function fetchMissingMedia(messageId) {
+  const msg = await db('messages').where({ id: messageId }).first()
+  if (!msg) throw Object.assign(new Error('El mensaje no existe'), { status: 404 })
+  if (msg.media_url) return msg
+  if (msg.type === 'text' || !msg.wa_message_id) throw Object.assign(new Error('Este mensaje no tiene un archivo para descargar'), { status: 400 })
+  const conv = await db('conversations').where({ id: msg.conversation_id }).first()
+  const inst = conv?.instance_id ? await db('whatsapp_instances').where({ id: conv.instance_id }).first() : null
+  let r = null
+  try { r = inst ? await providerFor(inst).fetchMediaBase64(inst, msg.wa_message_id) : null } catch (e) { console.warn('Descargar adjunto:', e.message) }
+  if (!r?.base64) throw Object.assign(new Error('WhatsApp ya no tiene disponible este archivo. Pídele a la persona que lo vuelva a enviar.'), { status: 404 })
+  const { toPlayableAudio } = await import('./audio.js')
+  let saved = saveMedia({ base64: r.base64, mime: r.mime || (msg.type === 'audio' ? 'audio/ogg' : 'application/octet-stream'), name: msg.media_name })
+  saved = await toPlayableAudio({ ...saved, type: msg.type === 'audio' ? 'audio' : saved.type })
+  const body = /^\[(audio|imagen|video|documento[^\]]*)\]$/.test(msg.body || '') ? '' : msg.body
+  await db('messages').where({ id: msg.id }).update({ media_url: saved.url, media_name: saved.name, media_mime: saved.mime, media_size: saved.size, body })
+  const updated = await db('messages').where({ id: msg.id }).first()
+  emitCompany(conv.company_id, 'message:status', { id: updated.id, conversation_id: updated.conversation_id, status: updated.status, media_url: updated.media_url, media_mime: updated.media_mime, media_name: updated.media_name, body: updated.body })
+  return updated
+}
+
+/** Convierte a MP3 las notas de voz ya guardadas en OGG (para que se escuchen también en iPhone y Mac) */
+export async function convertStoredVoiceNotes(limit = 300) {
+  const { toPlayableAudio, needsConversion, ffmpegAvailable } = await import('./audio.js')
+  if (!ffmpegAvailable()) return { converted: 0, skipped: 'sin ffmpeg' }
+  const rows = await db('messages').where({ type: 'audio' }).whereNotNull('media_url').where((b) => b.whereLike('media_mime', 'audio/ogg%').orWhereLike('media_mime', 'audio/opus%').orWhereLike('media_url', '%.ogg').orWhereLike('media_url', '%.opus')).orderBy('id', 'desc').limit(limit)
+  let converted = 0
+  for (const m of rows) {
+    if (!needsConversion(m.media_mime, m.media_url)) continue
+    const out = await toPlayableAudio({ url: m.media_url, mime: m.media_mime || 'audio/ogg', name: m.media_name, size: m.media_size, type: 'audio' })
+    if (out.url !== m.media_url) { await db('messages').where({ id: m.id }).update({ media_url: out.url, media_mime: out.mime, media_name: out.name, media_size: out.size }); converted++ }
+  }
+  return { converted, pending: rows.length - converted }
 }

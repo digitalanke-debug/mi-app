@@ -3,6 +3,7 @@ import { matchContact } from '../services/search.js'
 import { adsByConversation } from '../services/adReferrals.js'
 import { db, now } from '../db/knex.js'
 import { requireCompany, ownsRow } from '../auth.js'
+import { fetchMissingMedia } from '../services/conversations.js'
 import { loadConversation, sendOutbound, broadcastConversation, logActivity, sendTemplateMessage, retryMessage } from '../services/conversations.js'
 import { aiRespond } from '../services/automations.js'
 import { emitCompany } from '../services/realtime.js'
@@ -44,13 +45,13 @@ conversationsRouter.get('/', requireCompany, async (req, res) => {
   const ids = rows.map((r) => r.id)
   const tags = ids.length ? await db('conversation_tags as ctg').join('tags as t', 't.id', 'ctg.tag_id').whereIn('ctg.conversation_id', ids).select('ctg.conversation_id', 't.id', 't.name', 't.color') : []
   const lastIds = ids.length ? await db('messages').whereIn('conversation_id', ids).groupBy('conversation_id').select('conversation_id').max('id as id') : []
-  const lasts = lastIds.length ? await db('messages').whereIn('id', lastIds.map((l) => l.id)).select('conversation_id', 'body', 'direction', 'sender_type', 'created_at') : []
+  const lasts = lastIds.length ? await db('messages').whereIn('id', lastIds.map((l) => l.id)).select('conversation_id', 'body', 'type', 'direction', 'sender_type', 'created_at') : []
   const ads = await adsByConversation(ids)
   for (const r of rows) {
     r.ad = ads[r.id]?.[0] || null
     r.tags = tags.filter((t) => t.conversation_id === r.id).map(({ id, name, color }) => ({ id, name, color }))
     const l = lasts.find((m) => m.conversation_id === r.id)
-    r.last_message = l ? { body: l.body, direction: l.direction, sender_type: l.sender_type, created_at: l.created_at } : null
+    r.last_message = l ? { body: l.body, type: l.type, direction: l.direction, sender_type: l.sender_type, created_at: l.created_at } : null
   }
   res.json(rows)
 })
@@ -102,6 +103,13 @@ conversationsRouter.post('/:id/messages/:msgId/retry', canAccess, async (req, re
   const msg = await db('messages').where({ id: req.params.msgId, conversation_id: req.conv.id }).first()
   if (!msg) return res.status(404).json({ error: 'No existe' })
   try { res.json(await retryMessage(msg.id)) } catch (e) { res.status(400).json({ error: e.message }) }
+})
+
+// Descarga el archivo de un mensaje que llegó sin él (nota de voz, imagen o documento)
+conversationsRouter.post('/:id/messages/:msgId/media', canAccess, async (req, res) => {
+  const msg = await db('messages').where({ id: req.params.msgId, conversation_id: req.conv.id }).first()
+  if (!msg) return res.status(404).json({ error: 'El mensaje no existe' })
+  res.json(await fetchMissingMedia(msg.id))
 })
 
 conversationsRouter.post('/:id/read', canAccess, async (req, res) => {

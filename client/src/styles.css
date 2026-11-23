@@ -366,3 +366,9 @@ svg.ico { flex-shrink: 0; vertical-align: -3px; }
 .check-row .dot.ok { background: var(--success); } .check-row .dot.warn { background: #d97706; } .check-row .dot.bad { background: var(--danger); }
 .check-row .t { font-weight: 600; } .check-row .d { color: var(--text-2); font-size: 12.5px; }
 .check-summary { display: flex; gap: 6px; margin-left: auto; }
+
+/* Notas de voz */
+.voice { display: flex; align-items: center; gap: 6px; min-width: 260px; }
+.voice audio { height: 40px; flex: 1; min-width: 0; }
+.voice .rate { min-width: 46px; justify-content: center; font-variant-numeric: tabular-nums; }
+.missing-media { margin: 2px 0; }

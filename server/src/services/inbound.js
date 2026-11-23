@@ -3,6 +3,7 @@ import { emitCompany } from './realtime.js'
 import { loadConversation, logActivity } from './conversations.js'
 import { fire } from './automations.js'
 import { saveMedia } from './media.js'
+import { toPlayableAudio } from './audio.js'
 import { providerFor } from './whatsapp/index.js'
 import { recordAdReferral } from './adReferrals.js'
 import { handleMenuReply } from './menu.js'
@@ -80,7 +81,7 @@ export async function handleInbound(inst, { phone, name, body, type = 'text', wa
     try {
       let b64 = media.base64
       if (!b64 && waMessageId) { const r = await providerFor(inst).fetchMediaBase64(inst, waMessageId); if (r) { b64 = r.base64; media.mime = media.mime || r.mime } }
-      if (b64) saved = saveMedia({ base64: b64, mime: media.mime, name: media.name })
+      if (b64) saved = await toPlayableAudio(saveMedia({ base64: b64, mime: media.mime, name: media.name }))
     } catch (e) { console.error('No se pudo guardar el medio entrante:', e.message) }
   }
   const [mrow] = await db('messages').insert({ conversation_id: conv.id, direction: 'in', sender_type: 'contact', type, body: body || (saved ? '' : (type !== 'text' ? `[${type}]` : '')), wa_message_id: waMessageId, status: 'delivered', created_at: ts,

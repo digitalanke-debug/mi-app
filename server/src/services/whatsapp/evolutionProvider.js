@@ -230,6 +230,13 @@ export const evolutionProvider = {
   lidForMessage,
   lookupPhoneForLid,
 
+  /** ¿El número tiene WhatsApp? Devuelve { exists, jid } */
+  async checkNumber(inst, phone) {
+    const r = await api(`/chat/whatsappNumbers/${inst.instance_key}`, { method: 'POST', body: { numbers: [String(phone).replace(/\D/g, '')] } })
+    const x = (Array.isArray(r) ? r : [])[0]
+    return x ? { exists: !!x.exists, jid: x.jid || null } : null
+  },
+
   /** Descarga el contenido de un mensaje multimedia (base64) */
   async fetchMediaBase64(inst, waMessageId) {
     const data = await api(`/chat/getBase64FromMediaMessage/${inst.instance_key}`, { method: 'POST', body: { message: { key: { id: waMessageId } }, convertToMp4: false } })

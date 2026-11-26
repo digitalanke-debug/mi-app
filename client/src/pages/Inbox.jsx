@@ -3,6 +3,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useRealtime, useStore } from '../store.jsx'
 import { api, ago, fmtDate, fmtDateTime, fmtTime, initials, SOURCE_LABEL, getToken, phoneLabel, isHiddenPhone, mediaSrc, adTitle, PLATFORM_LABEL } from '../api.js'
 import { Icon } from '../components/Icons.jsx'
+import NewChatModal from '../components/NewChat.jsx'
 import { Modal } from '../components/Layout.jsx'
 
 const FILTERS = [['open', 'Abiertas'], ['mine', 'Mías'], ['unassigned', 'Sin asignar'], ['pending', 'Pendientes'], ['closed', 'Cerradas'], ['all', 'Todas']]
@@ -54,12 +55,17 @@ export default function Inbox() {
   })
 
   const [showPanel, setShowPanel] = useState(false)
+  const [newChat, setNewChat] = useState(false)
   useEffect(() => { setShowPanel(false) }, [selectedId])
   return (
     <div className={`inbox ${selectedId ? 'view-chat' : 'view-list'} ${showPanel ? 'show-panel' : ''}`}>
       <div className="inbox-list">
         <div className="head">
-          <div className="search"><Icon name="search" size={15} /><input className="input" placeholder="Buscar por nombre o teléfono" value={q} onChange={(e) => setQ(e.target.value)} /></div>
+          <div className="row" style={{ flexWrap: 'nowrap', gap: 8 }}>
+            <div className="search" style={{ flex: 1 }}><Icon name="search" size={15} /><input className="input" placeholder="Buscar por nombre o teléfono" value={q} onChange={(e) => setQ(e.target.value)} /></div>
+            <button className="btn btn-wa btn-icon" title="Nuevo chat: escribirle a un número" aria-label="Nuevo chat" onClick={() => setNewChat(true)}><Icon name="plus" size={17} /></button>
+          </div>
+          {newChat && <NewChatModal onClose={() => setNewChat(false)} />}
           <div className="filters">{FILTERS.map(([k, l]) => <button key={k} className={filter === k ? 'active' : ''} onClick={() => setFilter(k)}>{l}</button>)}</div>
         </div>
         {adFilter && <div className="ad-filter"><Icon name="megaphone" size={14} /><span>{adFilter === 'any' ? 'Chats que llegaron por anuncios' : `Chats del anuncio: ${search.get('nombre') || adFilter}`}</span>

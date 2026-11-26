@@ -4,6 +4,7 @@ import { adsByConversation } from '../services/adReferrals.js'
 import { db, now } from '../db/knex.js'
 import { requireCompany, ownsRow } from '../auth.js'
 import { fetchMissingMedia } from '../services/conversations.js'
+import { startConversation } from '../services/newChat.js'
 import { loadConversation, sendOutbound, broadcastConversation, logActivity, sendTemplateMessage, retryMessage } from '../services/conversations.js'
 import { aiRespond } from '../services/automations.js'
 import { emitCompany } from '../services/realtime.js'
@@ -20,6 +21,12 @@ async function canAccess(req, res, next) {
   req.conv = conv
   next()
 }
+
+// Empezar un chat con un número que dicta el cliente
+conversationsRouter.post('/start', requireCompany, async (req, res) => {
+  const { instance_id, phone, name, body } = req.body || {}
+  res.json(await startConversation({ companyId: req.companyId, instanceId: Number(instance_id), phone, name, body, user: req.user }))
+})
 
 // Lista de la bandeja
 conversationsRouter.get('/', requireCompany, async (req, res) => {

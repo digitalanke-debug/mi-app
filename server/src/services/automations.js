@@ -93,6 +93,10 @@ export async function fire(trigger, ctx) {
         .where('created_at', '>', new Date(Date.now() - 12 * 3600_000).toISOString())
         .where((b) => b.where('type', 'outside_hours.notice').orWhere((w) => w.where('type', 'automation.run').whereLike('data', `%"trigger":"outside_hours"%`))).first()
       if (recent) continue
+      // Si un asesor escribió en las últimas 12 horas, la persona ya está siendo atendida: no se envía el aviso
+      const human = await db('messages').where({ conversation_id: ctx.conversation.id, direction: 'out', sender_type: 'user' })
+        .where('created_at', '>', new Date(Date.now() - 12 * 3600_000).toISOString()).first()
+      if (human) continue
     }
     await runActions(auto, { ...ctx, conditions: parse(auto.conditions, {}) })
     ctx.conversation = await db('conversations').where({ id: ctx.conversation.id }).first()
